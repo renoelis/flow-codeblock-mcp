@@ -1,7 +1,7 @@
 {
   "name": "flow-codeblock-mcp",
-  "version": "0.1.1",
-  "description": "Flow Codeblock stdio MCP Server for script management and execution.",
+  "version": "0.2.0",
+  "description": "Flow Codeblock stdio MCP Server for non-script code execution and script management.",
   "license": "MIT",
   "author": {
     "name": "renoelis"

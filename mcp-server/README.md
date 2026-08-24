@@ -1,13 +1,13 @@
 # flow-codeblock-mcp
 
-Flow Codeblock 的本地 stdio MCP Server。它只调用 Flow Codeblock Rust REST API，不在用户电脑执行脚本；用户 JavaScript 仍由服务端 Bun Supervisor 执行。
+Flow Codeblock 的本地 stdio MCP Server。它只调用 Flow Codeblock Rust REST API，不在用户电脑执行代码；用户 JavaScript 仍由服务端 Bun Supervisor 执行。
 
 ## 安装
 
 客户端可以直接通过 Bun 从 npm 下载固定版本：
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.1.1
+bunx --bun flow-codeblock-mcp@0.2.0
 ```
 
 需要 Bun 1.4.0 或更高版本。
@@ -32,7 +32,7 @@ export FLOW_CODEBLOCK_TOKEN='flow_xxx'
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.1.1"],
+      "args": ["--bun", "flow-codeblock-mcp@0.2.0"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "http://103.40.14.90:53002",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>"
@@ -52,4 +52,4 @@ Skill 会指导模型先预览再发布脚本和独立接口文档 JSON；MCP �
 
 ## 工具
 
-提供 `flow_token_info`、脚本列表/读取/文档、所有权操作、预览、发布、执行和统计工具。所有权限、配额、限流、危险模式和模块白名单由服务端执行。
+`flow_write_code` 用于选择非脚本或脚本写码模式，并返回代码规则、请求体模板和后续工具链；它本身不写库、不执行。`flow_execute_code` 用于执行非脚本 JavaScript；脚本模式继续使用预览、确认、发布和 `flow_execute_script` 测试流程。所有权限、配额、限流、危险模式和模块白名单由服务端执行。

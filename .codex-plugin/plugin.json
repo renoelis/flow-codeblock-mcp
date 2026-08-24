@@ -1,6 +1,6 @@
 {
   "name": "flow-codeblock",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "通过本地 stdio MCP 管理、校验、发布和执行 Flow Codeblock 脚本。",
   "license": "MIT",
   "repository": "https://github.com/renoelis/flow-codeblock-mcp",
@@ -11,7 +11,7 @@
   "interface": {
     "displayName": "Flow Codeblock",
     "shortDescription": "管理和执行 Flow Codeblock 脚本",
-    "longDescription": "Flow Codeblock 提供本地 stdio MCP 工具和 Skill，用于查询 token 元数据、读取脚本、预览并确认脚本或接口文档变更、管理脚本所有权状态，以及通过独立 Web worker lane 执行脚本。插件不提供删除脚本或 token 管理工具。",
+    "longDescription": "Flow Codeblock 提供本地 stdio MCP 工具和 Skill，用于非脚本代码编写与执行、脚本查询、接口文档生成、预览并确认脚本变更、管理脚本所有权状态，以及通过独立 Web worker lane 执行代码。插件不提供删除脚本或 token 管理工具。",
     "developerName": "Local developer",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],

@@ -17,7 +17,7 @@ http://103.40.14.90:53002
 客户端需要安装 Bun 1.4.0 或更高版本，然后使用 npm 包启动本地 stdio MCP Server：
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.1.1
+bunx --bun flow-codeblock-mcp@0.2.0
 ```
 
 配置环境变量：
@@ -40,7 +40,7 @@ export FLOW_CODEBLOCK_TOKEN='flow_xxx'
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.1.1"],
+      "args": ["--bun", "flow-codeblock-mcp@0.2.0"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "http://103.40.14.90:53002",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>"
@@ -66,7 +66,7 @@ skills/flow-codeblock/
 
 ## MCP 工具
 
-工具覆盖 Token 信息、脚本查询、接口文档、预览、发布、执行、统计、锁定、解锁和所有权转移。服务端继续负责认证、配额、限流、危险模式、模块白名单、审计和 Web worker lane 路由。
+工具覆盖非脚本代码编写与执行、Token 信息、脚本查询、接口文档、预览、发布、执行、统计、锁定、解锁和所有权转移。服务端继续负责认证、配额、限流、危险模式、模块白名单、审计和 Web worker lane 路由。
 
 ## 许可证
 

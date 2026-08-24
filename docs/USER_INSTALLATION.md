@@ -4,7 +4,7 @@
 
 ## 1. 当前版本和工作方式
 
-当前公开版本：`0.1.1`
+当前公开版本：`0.2.0`
 
 安装的 MCP Server 运行在用户自己的电脑上，通过 HTTP 调用 Flow Codeblock Rust 服务；用户提交的 JavaScript 不会在用户电脑执行，仍由服务端固定版本的 Bun Supervisor 执行。
 
@@ -58,7 +58,7 @@ bun --version
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.1.1"],
+      "args": ["--bun", "flow-codeblock-mcp@0.2.0"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "http://103.40.14.90:53002",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>"
@@ -73,7 +73,7 @@ bun --version
 ```bash
 export FLOW_CODEBLOCK_BASE_URL=http://103.40.14.90:53002
 export FLOW_CODEBLOCK_TOKEN='flow_xxx'
-bunx --bun flow-codeblock-mcp@0.1.1
+bunx --bun flow-codeblock-mcp@0.2.0
 ```
 
 启动后进程会等待 MCP 客户端通过 stdio 通信，这是正常现象。不要在终端手工输入 JSON；应由客户端启动并管理该进程。
@@ -88,7 +88,7 @@ Codex CLI 和桌面 Codex 都可以使用本地 stdio MCP。打开终端执行�
 codex mcp add flow-codeblock \
   --env FLOW_CODEBLOCK_BASE_URL=http://103.40.14.90:53002 \
   --env FLOW_CODEBLOCK_TOKEN='<YOUR_FLOW_CODEBLOCK_TOKEN>' \
-  -- bunx --bun flow-codeblock-mcp@0.1.1
+  -- bunx --bun flow-codeblock-mcp@0.2.0
 ```
 
 检查配置：
@@ -150,7 +150,7 @@ Skill 会要求先预览、再由用户明确确认发布。MCP 不提供删除�
 | --- | --- |
 | 名称 | `flow-codeblock` |
 | Command / 命令 | `bunx` |
-| Arguments / 参数 | `--bun flow-codeblock-mcp@0.1.1` |
+| Arguments / 参数 | `--bun flow-codeblock-mcp@0.2.0` |
 | `FLOW_CODEBLOCK_BASE_URL` | `http://103.40.14.90:53002` |
 | `FLOW_CODEBLOCK_TOKEN` | 用户自己的 Token |
 
@@ -158,7 +158,7 @@ Skill 会要求先预览、再由用户明确确认发布。MCP 不提供删除�
 
 ```text
 --bun
-flow-codeblock-mcp@0.1.1
+flow-codeblock-mcp@0.2.0
 ```
 
 保存后启用该服务器，使用“测试连接”或查看工具列表。若工具列表为空，先检查 Bun 路径和 Token，再重启 Cherry Studio。
@@ -178,7 +178,7 @@ Cursor 通常支持在全局设置或项目配置中添加 MCP。项目级配置
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.1.1"],
+      "args": ["--bun", "flow-codeblock-mcp@0.2.0"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "http://103.40.14.90:53002",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>"
@@ -190,7 +190,7 @@ Cursor 通常支持在全局设置或项目配置中添加 MCP。项目级配置
 
 也可以在 Cursor 的 `Settings -> Tools & MCP`（部分版本显示为 `Settings -> MCP`）中新增一个 `stdio` Server，并分别填写相同的 command、args 和 env。
 
-保存配置后，在 MCP 面板确认 `flow-codeblock` 已启用；若 Cursor 显示命令启动失败，先在 Cursor 可用的终端执行 `bunx --bun flow-codeblock-mcp@0.1.1`，确认 Bun 已加入系统 PATH。
+保存配置后，在 MCP 面板确认 `flow-codeblock` 已启用；若 Cursor 显示命令启动失败，先在 Cursor 可用的终端执行 `bunx --bun flow-codeblock-mcp@0.2.0`，确认 Bun 已加入系统 PATH。
 
 ## 7. WorkBuddy 配置
 
@@ -205,7 +205,7 @@ WorkBuddy 的设置入口和字段名称会随版本变化，通常在：
 ```text
 名称: flow-codeblock
 命令: bunx
-参数: --bun flow-codeblock-mcp@0.1.1
+参数: --bun flow-codeblock-mcp@0.2.0
 ```
 
 在环境变量区域添加：
@@ -215,7 +215,7 @@ FLOW_CODEBLOCK_BASE_URL=http://103.40.14.90:53002
 FLOW_CODEBLOCK_TOKEN=<YOUR_FLOW_CODEBLOCK_TOKEN>
 ```
 
-如果 WorkBuddy 将参数拆成列表，请按顺序添加 `--bun` 和 `flow-codeblock-mcp@0.1.1` 两项。保存并启用后，刷新工具列表即可看到 Flow Codeblock 工具。
+如果 WorkBuddy 将参数拆成列表，请按顺序添加 `--bun` 和 `flow-codeblock-mcp@0.2.0` 两项。保存并启用后，刷新工具列表即可看到 Flow Codeblock 工具。
 
 ## 8. 首次使用建议
 
@@ -223,10 +223,12 @@ FLOW_CODEBLOCK_TOKEN=<YOUR_FLOW_CODEBLOCK_TOKEN>
 
 1. 调用 `flow_token_info`，确认 Token 有效、配额和过期时间正常。
 2. 调用 `flow_list_scripts`，确认能读取当前 Token 名下脚本。
-3. 让客户端生成两份独立内容：一份 `javascript` 代码，一份符合 `script-interface-doc.v1` 的 JSON。
-4. 调用 `flow_preview_script_change`，检查校验结果、敏感字段警告和变更摘要。
-5. 用户明确确认后，调用 `flow_apply_script_change`，并传入 `confirm: true` 和返回的 `preview_id`。
-6. 使用 `flow_execute_script` 执行脚本，再用 `flow_script_stats` 查看统计。
+3. 涉及写代码时先调用 `flow_write_code`，明确选择 `non_script` 或 `script` 模式。
+4. 非脚本模式只生成 JavaScript 和 `POST /flow/codeblock` 请求体；用户明确要求测试时调用 `flow_execute_code`。
+5. 脚本模式生成两份独立内容：一份 `javascript` 代码，一份符合 `script-interface-doc.v1` 的 JSON。
+6. 调用 `flow_preview_script_change`，检查校验结果、敏感字段警告和变更摘要。
+7. 用户明确确认后，调用 `flow_apply_script_change`，并传入 `confirm: true` 和返回的 `preview_id`。
+8. 创建成功后使用 `flow_execute_script` 测试脚本，再用 `flow_script_stats` 查看统计。
 
 更新脚本时必须先读取当前版本并传入 `expected_version`。只修改描述或 IP 白名单不会生成新代码版本；`ip_whitelist: null` 表示清除白名单，省略该字段表示保持原值。
 
@@ -234,6 +236,8 @@ FLOW_CODEBLOCK_TOKEN=<YOUR_FLOW_CODEBLOCK_TOKEN>
 
 MCP 提供以下能力：
 
+- 非脚本 JavaScript 代码编写规则和调用请求体说明；
+- 非脚本 JavaScript 执行和测试；
 - Token 元数据查询；
 - 脚本列表、代码和接口文档读取；
 - 脚本创建/更新预览和确认发布；
@@ -246,7 +250,44 @@ MCP 不提供脚本删除、Token 管理或任意 HTTP 代理工具。删除脚�
 
 所有执行请求都由服务端执行认证、配额扣减、限流、危险模式校验、模块白名单、审计和统计，并进入网页专用 Web worker lane；普通 HTTP 请求仍由服务端按其标准 lane 规则处理。
 
-## 10. 常见问题
+## 10. 代码编写模式
+
+### 非脚本模式
+
+调用 `flow_write_code` 时传入：
+
+```json
+{
+  "mode": "non_script",
+  "requirement": "将输入数组按金额从高到低排序并返回前十条",
+  "input_example": {"items": [{"amount": 10}]}
+}
+```
+
+模型应返回 JavaScript 和以下 REST 请求体说明，不创建脚本：
+
+```json
+{
+  "codebase64": "<Base64 编码的 JavaScript>",
+  "input": {"items": [{"amount": 10}]},
+  "qingcodeTimeout": 3000
+}
+```
+
+该请求体用于 `POST /flow/codeblock`。使用 MCP 时，不要把 `accessToken` 放进 `input`；`flow_execute_code` 会自动注入认证和 MCP Web lane 标识。
+
+### 脚本模式
+
+调用 `flow_write_code` 时传入 `mode: "script"`。模型必须生成独立的 JavaScript 和 `script-interface-doc.v1` JSON，然后按以下顺序执行：
+
+```text
+flow_write_code -> flow_preview_script_change -> 用户确认
+-> flow_apply_script_change -> flow_execute_script
+```
+
+预览和确认是发布前置条件；未经用户明确确认，不得创建或更新脚本。脚本创建的代码和接口文档会作为同一版本原子保存。
+
+## 11. 常见问题
 
 ### 报错 `FLOW_CODEBLOCK_TOKEN is required`
 
@@ -268,6 +309,6 @@ MCP 不提供脚本删除、Token 管理或任意 HTTP 代理工具。删除脚�
 
 这是产品边界设计。MCP 和 Skill 会拒绝删除请求，用户需要到现有网页或 REST API 执行删除。
 
-## 11. 版本升级
+## 12. 版本升级
 
-客户端配置中的包版本固定为 `flow-codeblock-mcp@0.1.1`，可在确认新版本发布后统一替换版本号。升级前建议先阅读 GitHub 仓库的 Release 或变更说明，并重启客户端让新的 MCP Server 生效。
+客户端配置中的包版本固定为 `flow-codeblock-mcp@0.2.0`，可在确认新版本发布后统一替换版本号。升级前建议先阅读 GitHub 仓库的 Release 或变更说明，并重启客户端让新的 MCP Server 生效。

@@ -34,6 +34,285 @@ function result(value: unknown) {
   return { content: [{ type: "text" as const, text: jsonText(value) }] };
 }
 
+const allowedModules = [
+  "axios",
+  "cheerio",
+  "crypto-js",
+  "csv-parser",
+  "fast-xml-parser",
+  "form-data",
+  "lodash",
+  "pinyin",
+  "qs",
+  "sm-crypto-v2",
+  "uuid",
+  "xlsx",
+  "dayjs",
+];
+
+const codeRules = [
+  "所有用户数据都从全局 input 读取；不要从环境变量、持久化全局变量或其他外部状态读取业务参数。",
+  "默认使用顶层 return 返回普通值或 Promise；只有事件式/异步流程或用户明确要求时才使用严格裸赋值 qf_output。",
+  "只使用服务端允许的模块；优先使用标准 JavaScript 和原生 fetch，不要静态/动态 import、export 或间接 require。",
+  "禁止 eval、Function、Proxy、child_process、process.exit、spawn、exec、setImmediate、setInterval、setTimeout 等危险模式。",
+  "禁止 window、document、localStorage、DOM、XMLHttpRequest、WebSocket，以及黑名单 Node 模块。",
+  "不要把 Token、密码、Cookie、Authorization 值或验证码写入代码、接口文档和输出。",
+  "代码、输入、结果和执行时间必须服从服务端限制；默认代码 65,535 字节、输入 2 MiB、结果 10 MiB、执行超时最大 15,000 ms，实际部署配置优先。",
+];
+
+const agentPromptRules = {
+  source: "Flow-codeblock_rust/AGENT_PROMPT.md",
+  runtime: [
+    "服务端固定使用 Bun 1.4.0 Supervisor；每次执行使用 fresh Worker，不共享变量、模块状态或持久化全局状态。",
+    "支持现代 JavaScript、async/await、Promise、箭头函数和顶层 return；不要生成 Rust、Bun Supervisor、HTTP 服务端或数据库代码。",
+  ],
+  input: {
+    all_user_data_from: "global input",
+    non_script: {
+      endpoint: "POST /flow/codeblock",
+      shape: "业务输入对象原样注入 input，缺省为 {}",
+      example: { name: "Alice", items: [1, 2, 3] },
+      code_access: "input.name、input.items",
+    },
+    script: {
+      endpoint: "GET|POST /flow/codeblock/{scriptId}",
+      shape: { query: {}, header: {}, body: {}, cookies: {} },
+      code_access: "input.query、input.header、input.body、input.cookies",
+      query: "查询参数；重复参数为字符串数组；qingcodeToken 和 qingcodeTimeout 不进入业务 query",
+      header: "请求头；服务端过滤 x-original-cookie，需要时从 cookie 头读取",
+      body: "POST JSON 请求体；空请求体为 {}",
+      cookies: "Cookie 键值对象；无 Cookie 时可能不存在",
+    },
+  },
+  output: {
+    default: "顶层 return；返回值必须可 JSON 序列化",
+    qf_output: "仅事件式/异步流程或用户明确要求时使用 qf_output = { ... }，不得与顶层 return 混用",
+    recommended: ["{ success: true, data: value }", "{ success: false, error: message }"],
+  },
+  interface_document: "脚本模式必须单独输出并提交 script-interface-doc.v1 JSON，不能写成 JavaScript 注释",
+  network: "优先使用原生 fetch，检查 HTTP 状态和 JSON/文本/空响应；所有异步请求必须 await 或 return",
+  redirects: "仅脚本接口解析 flow_redirect_url 和 flow_redirect_code；即时非脚本接口把它们作为普通结果",
+};
+
+const interfaceDocSchema = {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flow-codeblock.local/schemas/script-interface-doc.v1.json",
+  title: "Flow Script Interface Document v1",
+  type: "object",
+  required: ["schema_version", "endpoint"],
+  additionalProperties: false,
+  properties: {
+    schema_version: { const: "script-interface-doc.v1" },
+    title: { type: "string", maxLength: 200 },
+    summary: { type: "string", maxLength: 2000 },
+    endpoint: {
+      type: "object",
+      required: ["methods"],
+      additionalProperties: false,
+      properties: {
+        methods: { type: "array", minItems: 1, maxItems: 2, uniqueItems: true, items: { enum: ["GET", "POST"] } },
+        path: { type: "string", pattern: "^/flow/codeblock/" },
+        description: { type: "string", maxLength: 4000 },
+      },
+    },
+    request: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        query: { "$ref": "#/$defs/parameters" },
+        headers: { "$ref": "#/$defs/parameters" },
+        body: { "$ref": "#/$defs/body" },
+      },
+    },
+    responses: { type: "array", maxItems: 50, items: { "$ref": "#/$defs/response" } },
+    logic_description: { type: "string", maxLength: 20_000 },
+    usage_refs: { type: "array", maxItems: 100, items: { "$ref": "#/$defs/usage" } },
+  },
+  "$defs": {
+    parameters: {
+      type: "array",
+      maxItems: 100,
+      items: {
+        type: "object",
+        required: ["name", "required", "description"],
+        additionalProperties: false,
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 200 },
+          type: { enum: ["string", "integer", "number", "boolean", "array", "object"] },
+          required: { type: "boolean" },
+          description: { type: "string", minLength: 1, maxLength: 4000 },
+          example: {},
+          default: {},
+          format: { type: "string", maxLength: 100 },
+          enum_values: { type: "array", maxItems: 100 },
+        },
+      },
+    },
+    body: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        content_type: { const: "application/json" },
+        schema: {},
+        example: {},
+      },
+    },
+    response: {
+      type: "object",
+      required: ["status", "description"],
+      additionalProperties: false,
+      properties: {
+        status: { type: "integer", minimum: 100, maximum: 599 },
+        description: { type: "string", minLength: 1, maxLength: 4000 },
+        content_type: { const: "application/json" },
+        schema: {},
+        example: {},
+      },
+    },
+    usage: {
+      type: "object",
+      required: ["app_name"],
+      additionalProperties: false,
+      properties: {
+        app_id: { type: "string", maxLength: 200 },
+        app_name: { type: "string", minLength: 1, maxLength: 200 },
+        location: { type: "string", maxLength: 500 },
+        note: { type: "string", maxLength: 4000 },
+      },
+    },
+  },
+};
+
+function codeWriterContext(
+  mode: "non_script" | "script",
+  requirement: string,
+  inputExample: unknown,
+): Record<string, unknown> {
+  const directRequestBody = {
+    codebase64: "<Base64 编码的 JavaScript>",
+    input: inputExample ?? {},
+    qingcodeTimeout: 3000,
+  };
+  const interfaceDocTemplate = {
+    schema_version: "script-interface-doc.v1",
+    title: "<接口标题>",
+    summary: "<接口摘要>",
+    endpoint: {
+      methods: ["POST"],
+      description: "<接口说明>",
+    },
+    request: {
+      query: [],
+      headers: [],
+      body: {
+        content_type: "application/json",
+        schema: { type: "object" },
+        example: inputExample ?? {},
+      },
+    },
+    responses: [
+      {
+        status: 200,
+        description: "成功",
+        content_type: "application/json",
+        schema: { type: "object" },
+      },
+    ],
+    logic_description: "<处理逻辑>",
+  };
+
+  const common = {
+    mode,
+    requirement,
+    side_effects: {
+      database_write: false,
+      code_execution: false,
+    },
+    code_rules: codeRules,
+    allowed_modules: allowedModules,
+    output_format: [
+      "输出一个独立的 javascript 代码块。",
+      "代码使用 input 和顶层 return。",
+      "不要把接口契约写进 JSDoc 或块注释。",
+    ],
+    agent_prompt_rules: agentPromptRules,
+  };
+
+  if (mode === "non_script") {
+    return {
+      ...common,
+      purpose: "生成可直接提交给非脚本执行接口的 JavaScript，并说明调用规则；不会创建脚本。",
+      next_action: "将生成的 code 或 code_base64 与 input 交给 flow_execute_code，或按 direct_rest_request 调用 Rust API。",
+      direct_rest_request: {
+        method: "POST",
+        path: "/flow/codeblock",
+        headers: {
+          "Content-Type": "application/json",
+          accessToken: "<FLOW_CODEBLOCK_TOKEN>",
+          "X-Flow-Execution-Origin": "mcp",
+        },
+        body: directRequestBody,
+        notes: [
+          "codebase64 是 JavaScript UTF-8 内容的 Base64，不是 code_base64。",
+          "input 会作为代码中的 input 对象；缺省时使用 {}。",
+          "qingcodeTimeout 单位为毫秒，服务端会校验最小和最大值。",
+          "MCP Server 会自动补 accessToken 和 X-Flow-Execution-Origin，调用 flow_execute_code 时不要把它们放进 input。",
+        ],
+      },
+      mcp_tool: {
+        name: "flow_execute_code",
+        input: {
+          code: "<JavaScript> 或 code_base64",
+          input: inputExample ?? {},
+          timeout_ms: 3000,
+        },
+      },
+      input_contract: agentPromptRules.input.non_script,
+    };
+  }
+
+  return {
+    ...common,
+    purpose: "生成符合 Flow Codeblock 规则的脚本代码和独立接口文档，然后按预览、确认、创建、执行流程处理。",
+    side_effects_after_confirmation: {
+      database_write: true,
+      code_execution: true,
+    },
+    workflow: [
+      "生成 javascript 代码和独立的 script-interface-doc.v1 JSON。",
+      "调用 flow_preview_script_change，创建时 operation=create，不要带 script_id。",
+      "向用户展示校验结果、敏感字段警告、代码 hash、规范化文档和变更摘要。",
+      "只有用户明确确认后，才调用 flow_apply_script_change，传 preview_id 和 confirm=true。",
+      "创建成功后读取返回的 script_id 和 version，再调用 flow_execute_script 做一次测试执行。",
+      "执行完成后报告响应和配额结果；需要时调用 flow_script_stats。",
+    ],
+    script_request_body: {
+      code_base64: "<Base64 编码的 JavaScript>",
+      description: "<脚本描述>",
+      ip_whitelist: "省略表示保持原值；null 表示清除白名单；数组表示设置白名单",
+      interface_doc: interfaceDocTemplate,
+    },
+    interface_doc_template: interfaceDocTemplate,
+    interface_doc_schema: interfaceDocSchema,
+    interface_doc_rules: [
+      "必须是一个独立 JSON 对象，不得写入 JavaScript 注释、Markdown 说明、注释或尾随逗号。",
+      "必须包含 schema_version=script-interface-doc.v1 和 endpoint.methods。",
+      "endpoint.methods 只能使用 GET、POST；path 可省略，更新时使用实际 /flow/codeblock/{script_id}。",
+      "request.query、request.headers、request.body 必须与代码实际读取的 input.query、input.header、input.body 一致。",
+      "脚本输入的 Cookie 通过 input.cookies 读取；文档中只能写字段名、类型、示例和脱敏占位符。",
+      "responses.status 必须为 100-599；响应 Schema 和 example 必须与代码返回值一致。",
+      "interface_doc 先提交给 flow_preview_script_change，校验通过且用户确认后才能发布。",
+    ],
+    input_contract: agentPromptRules.input.script,
+    mcp_tools: [
+      "flow_preview_script_change",
+      "flow_apply_script_change",
+      "flow_execute_script",
+      "flow_script_stats",
+    ],
+  };
+}
+
 function cleanHeaders(headers: Record<string, string> | undefined): Record<string, string> {
   const output: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers ?? {})) {
@@ -135,7 +414,20 @@ async function revalidatePreview(
   });
 }
 
-const server = new McpServer({ name: "flow-codeblock", version: "0.1.1" });
+const server = new McpServer({ name: "flow-codeblock", version: "0.2.0" });
+
+server.registerTool(
+  "flow_write_code",
+  {
+    description: "专门处理 Flow Codeblock 写代码请求。选择非脚本或脚本模式，返回代码约束、请求体模板和下一步工具链；本工具不写数据库、不执行代码。",
+    inputSchema: {
+      mode: z.enum(["non_script", "script"]),
+      requirement: z.string().min(1).max(20_000),
+      input_example: z.unknown().optional(),
+    },
+  },
+  async ({ mode, requirement, input_example }) => result(codeWriterContext(mode, requirement, input_example)),
+);
 
 server.registerTool(
   "flow_token_info",
@@ -480,6 +772,39 @@ server.registerTool(
         body: method === "POST" && body !== undefined ? JSON.stringify(body) : undefined,
       }, true);
       return result({ quota_notice: "本次执行已按普通执行请求处理并扣减配额。", response });
+    } catch (error) {
+      return apiError(error);
+    }
+  },
+);
+
+server.registerTool(
+  "flow_execute_code",
+  {
+    description: "执行非脚本 JavaScript。调用 POST /flow/codeblock，使用 MCP 标识进入 Web worker lane，并执行正常认证、配额、限流、危险模式、模块白名单、审计和统计。",
+    inputSchema: {
+      code: z.string().min(1).optional(),
+      code_base64: z.string().min(1).optional(),
+      input: z.unknown().optional(),
+      timeout_ms: z.number().int().positive().optional(),
+    },
+  },
+  async ({ code, code_base64, input: executionInput, timeout_ms }) => {
+    try {
+      const payload = {
+        codebase64: encodeCode(code, code_base64),
+        input: executionInput ?? {},
+        ...(timeout_ms === undefined ? {} : { qingcodeTimeout: timeout_ms }),
+      };
+      const response = await apiRequest("/flow/codeblock", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }, true);
+      return result({
+        mode: "non_script",
+        quota_notice: "本次非脚本执行已按普通执行请求处理并扣减配额。",
+        response,
+      });
     } catch (error) {
       return apiError(error);
     }
