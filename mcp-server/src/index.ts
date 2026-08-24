@@ -135,7 +135,7 @@ async function revalidatePreview(
   });
 }
 
-const server = new McpServer({ name: "flow-codeblock", version: "0.1.0" });
+const server = new McpServer({ name: "flow-codeblock", version: "0.1.1" });
 
 server.registerTool(
   "flow_token_info",

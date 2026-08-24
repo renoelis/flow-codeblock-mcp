@@ -17,7 +17,7 @@ http://103.40.14.90:53002
 客户端需要安装 Bun 1.4.0 或更高版本，然后使用 npm 包启动本地 stdio MCP Server：
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.1.0
+bunx --bun flow-codeblock-mcp@0.1.1
 ```
 
 配置环境变量：
@@ -38,7 +38,7 @@ export FLOW_CODEBLOCK_TOKEN='flow_xxx'
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.1.0"],
+      "args": ["--bun", "flow-codeblock-mcp@0.1.1"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "http://103.40.14.90:53002",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>"

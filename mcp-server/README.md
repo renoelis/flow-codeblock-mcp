@@ -7,7 +7,7 @@ Flow Codeblock 的本地 stdio MCP Server。它只调用 Flow Codeblock Rust RES
 客户端可以直接通过 Bun 从 npm 下载固定版本：
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.1.0
+bunx --bun flow-codeblock-mcp@0.1.1
 ```
 
 需要 Bun 1.4.0 或更高版本。
@@ -32,7 +32,7 @@ export FLOW_CODEBLOCK_TOKEN='flow_xxx'
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.1.0"],
+      "args": ["--bun", "flow-codeblock-mcp@0.1.1"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "http://103.40.14.90:53002",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>"

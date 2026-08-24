@@ -1,6 +1,6 @@
 {
   "name": "flow-codeblock-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Flow Codeblock stdio MCP Server for script management and execution.",
   "license": "MIT",
   "author": {
@@ -19,8 +19,8 @@
     "bun": ">=1.4.0"
   },
   "scripts": {
-    "build": "bun build src/index.ts --target node --outfile dist/index.js",
-    "check": "bun build src/index.ts --target node --outfile /tmp/flow-codeblock-mcp-check.js",
+    "build": "bun run scripts/build.ts",
+    "check": "bun run scripts/build.ts",
     "start": "bun run dist/index.js",
     "prepack": "bun run build"
   },
