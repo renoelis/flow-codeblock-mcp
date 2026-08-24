@@ -7,17 +7,17 @@ Flow Codeblock 的本地 stdio MCP Server 与 Codex Skill。MCP 只调用 Flow C
 需要 Bun 1.4.0 或更高版本：
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.2.5
+bunx --bun flow-codeblock-mcp@0.2.6
 ```
 
 必须配置：
 
 ```bash
-FLOW_CODEBLOCK_BASE_URL=http://103.40.14.90:53002
+FLOW_CODEBLOCK_BASE_URL=https://qingcode.oalite.com
 FLOW_CODEBLOCK_TOKEN=flow_xxx
 ```
 
-`FLOW_CODEBLOCK_BASE_URL` 是已部署的 Flow Codeblock Rust API 地址。生产环境建议使用 HTTPS 域名。Token 应使用客户端的环境变量或密钥配置，不要写入提示词、工具参数或公开文件。
+`FLOW_CODEBLOCK_BASE_URL` 是已部署的 Flow Codeblock Rust API 地址。公网服务使用 `https://qingcode.oalite.com`；仅当用户在本机部署 Rust 服务时才改为对应的 localhost 地址。Token 应使用客户端的环境变量或密钥配置，不要写入提示词、工具参数或公开文件。
 
 ## 通用 stdio MCP 配置
 
@@ -26,9 +26,9 @@ FLOW_CODEBLOCK_TOKEN=flow_xxx
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.2.5"],
+      "args": ["--bun", "flow-codeblock-mcp@0.2.6"],
       "env": {
-        "FLOW_CODEBLOCK_BASE_URL": "http://103.40.14.90:53002",
+        "FLOW_CODEBLOCK_BASE_URL": "https://qingcode.oalite.com",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>"
       }
     }

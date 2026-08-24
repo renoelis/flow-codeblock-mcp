@@ -14,7 +14,7 @@ const previewTtlMs = 10 * 60 * 1000;
 const requestTimeoutMs = 30_000;
 
 if (!configuredBaseUrl) {
-  throw new Error("FLOW_CODEBLOCK_BASE_URL is required; configure an HTTPS localhost URL or an explicit Flow Codeblock API URL");
+  throw new Error("FLOW_CODEBLOCK_BASE_URL is required; configure https://qingcode.oalite.com or an explicit local Flow Codeblock API URL");
 }
 
 let baseUrl: string;
@@ -198,7 +198,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.5" },
+  { name: "flow-codeblock", version: "0.2.6" },
   { instructions: serverInstructions },
 );
 

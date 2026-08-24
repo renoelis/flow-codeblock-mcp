@@ -9,7 +9,7 @@ description: 使用 Flow Codeblock MCP 工具写出非脚本代码或创建、�
 
 ## 边界
 
-- MCP 必须从环境读取 `FLOW_CODEBLOCK_BASE_URL` 和 `FLOW_CODEBLOCK_TOKEN`；缺少任一变量时拒绝启动。优先使用 HTTPS localhost，不要把 Token 放入工具参数、代码或文档。
+- MCP 必须从环境读取 `FLOW_CODEBLOCK_BASE_URL` 和 `FLOW_CODEBLOCK_TOKEN`；缺少任一变量时拒绝启动。公网服务使用 `https://qingcode.oalite.com`，仅本机部署 Rust 服务时使用对应的 localhost 地址。不要把 Token 放入工具参数、代码或文档。
 - 不提供脚本删除、Token 管理或任意 HTTP 代理工具。删除请求必须拒绝，并引导用户使用现有网页或 REST API。
 - 执行工具使用 MCP Web worker lane，但仍执行服务端认证、配额、限流、安全校验、审计和统计。
 - 锁定、解锁和所有权转移只能使用对应验证码工具，不猜测、记录或复用验证码。
