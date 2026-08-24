@@ -1,6 +1,6 @@
 {
   "name": "flow-codeblock",
-  "version": "0.2.0",
+  "version": "0.2.5",
   "description": "通过本地 stdio MCP 管理、校验、发布和执行 Flow Codeblock 脚本。",
   "license": "MIT",
   "repository": "https://github.com/renoelis/flow-codeblock-mcp",

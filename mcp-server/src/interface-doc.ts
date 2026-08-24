@@ -1,0 +1,291 @@
+type JsonObject = Record<string, unknown>;
+
+export const interfaceDocRequiredFields = {
+  document: ["schema_version", "title", "summary", "endpoint", "responses", "logic_description"],
+  endpoint: ["methods", "description"],
+  request: ["query/headers/body（仅在实际存在对应参数或 POST 请求体时填写）"],
+  parameter: ["name", "type", "description", "example", "required（运行时是否必填）"],
+  body: ["content_type", "schema", "example"],
+  response: ["status", "description", "content_type", "schema", "example"],
+  conditionally_optional: ["request（无查询参数、请求头和请求体时可省略）", "endpoint.path（创建可省略，更新必填实际路径）", "usage_refs（始终可省略）"],
+};
+
+export const interfaceDocNestedRules = [
+  "每个请求体或响应体 Schema 节点都必须填写 type；每个实际字段节点还必须填写 description 和 example。",
+  "固定字段对象必须有 properties，并为每个字段填写名称、type、description、example；动态键字典必须用 additionalProperties 描述完整的值 Schema；二者不能同时缺失。",
+  "每个 type=array 都必须有 items；items.type=object 时必须有完整 items.properties。数组 example 中的每个对象都必须覆盖 items.properties 的全部字段。",
+  "任意层级 properties 与对应 example 字段必须双向一致；properties 中的字段即使运行时可选，也必须出现在完整 example 中。",
+  "JSON Schema 的 required 只表示运行时真正必填的业务字段；成功和错误结构不同应拆成不同 responses。",
+];
+
+export const interfaceDocInputDescription = [
+  "创建和代码更新时必填完整 script-interface-doc.v1；只改 description/ip_whitelist 时可省略。",
+  "字段位置：根对象包含 schema_version='script-interface-doc.v1'、title、summary、endpoint、request?、responses、logic_description、usage_refs?；endpoint={methods,path?,description}；request={query?,headers?,body?}；query/headers 为 parameter 数组；body={content_type='application/json',schema,example}；responses 的每项={status,description,content_type='application/json',schema,example}。",
+  `必填结构：${Object.entries(interfaceDocRequiredFields).map(([key, fields]) => `${key}=[${fields.join(",")}]`).join("；")}。`,
+  ...interfaceDocNestedRules,
+].join(" ");
+
+function isObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOwn(object: JsonObject, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+function requireText(object: JsonObject, key: string, path: string, issues: string[], minLength = 1): void {
+  const value = object[key];
+  if (typeof value !== "string" || value.trim().length < minLength) {
+    issues.push(`${path}.${key} 必须是至少 ${minLength} 个字符的非空字符串`);
+  }
+}
+
+function validateFieldSchemaMetadata(schema: JsonObject, schemaPath: string, issues: string[]): void {
+  if (typeof schema.type !== "string" || schema.type.trim().length === 0) {
+    issues.push(`${schemaPath}.type 必须填写`);
+  }
+  requireText(schema, "description", schemaPath, issues);
+  if (!hasOwn(schema, "example")) {
+    issues.push(`${schemaPath}.example 必须填写字段示例值`);
+  }
+}
+
+function validateSchemaExampleCoverage(
+  schema: JsonObject,
+  example: unknown,
+  schemaPath: string,
+  examplePath: string,
+  issues: string[],
+  root = true,
+  metadataValidated = false,
+): void {
+  if (root) {
+    if (typeof schema.type !== "string" || schema.type.trim().length === 0) {
+      issues.push(`${schemaPath}.type 必须填写`);
+    }
+  } else if (!metadataValidated) {
+    validateFieldSchemaMetadata(schema, schemaPath, issues);
+  }
+
+  if (schema.type === "array") {
+    if (!Array.isArray(example)) {
+      issues.push(`${examplePath} 必须是数组`);
+      return;
+    }
+    if (!isObject(schema.items) || Object.keys(schema.items).length === 0) {
+      issues.push(`${schemaPath}.items 必须完整描述数组元素`);
+      return;
+    }
+    validateFieldSchemaMetadata(schema.items, `${schemaPath}.items`, issues);
+    example.forEach((item, index) => validateSchemaExampleCoverage(
+      schema.items as JsonObject,
+      item,
+      `${schemaPath}.items`,
+      `${examplePath}[${index}]`,
+      issues,
+      false,
+      true,
+    ));
+    return;
+  }
+
+  if (schema.type !== "object") return;
+  const properties = isObject(schema.properties) ? schema.properties : undefined;
+  const additionalProperties = isObject(schema.additionalProperties) ? schema.additionalProperties : undefined;
+  if (!properties && !additionalProperties) {
+    issues.push(`${schemaPath} 必须使用 properties 描述固定字段，或使用 additionalProperties 描述动态键的值 Schema`);
+    return;
+  }
+  if (!isObject(example)) {
+    issues.push(`${examplePath} 必须是对象，并与 ${schemaPath}.properties 逐层对应`);
+    return;
+  }
+
+  if (additionalProperties) {
+    validateFieldSchemaMetadata(additionalProperties, `${schemaPath}.additionalProperties`, issues);
+  }
+
+  if (properties) {
+    for (const [key, propertySchema] of Object.entries(properties)) {
+      const propertyPath = `${schemaPath}.properties.${key}`;
+      if (!isObject(propertySchema)) {
+        issues.push(`${propertyPath} 必须是对象 Schema，并填写 type、description、example`);
+        continue;
+      }
+      validateFieldSchemaMetadata(propertySchema, propertyPath, issues);
+      if (!hasOwn(example, key)) {
+        issues.push(`${examplePath} 缺少字段 ${key}；properties 中的字段即使运行时可选，也必须出现在完整值中`);
+      } else {
+        validateSchemaExampleCoverage(propertySchema, example[key], propertyPath, `${examplePath}.${key}`, issues, false, true);
+      }
+    }
+  }
+  for (const [key, value] of Object.entries(example)) {
+    if (properties && hasOwn(properties, key)) continue;
+    if (additionalProperties) {
+      validateSchemaExampleCoverage(
+        additionalProperties,
+        value,
+        `${schemaPath}.additionalProperties`,
+        `${examplePath}.${key}`,
+        issues,
+        false,
+        true,
+      );
+    } else {
+      issues.push(`${schemaPath}.properties 缺少字段 ${key} 的 Schema 描述`);
+    }
+  }
+}
+
+function validateSchemaAndExample(object: JsonObject, path: string, issues: string[]): void {
+  if (object.content_type !== "application/json") {
+    issues.push(`${path}.content_type 必须是 application/json`);
+  }
+  if (!isObject(object.schema) || Object.keys(object.schema).length === 0) {
+    issues.push(`${path}.schema 必须填写非空的响应体或请求体 JSON Schema`);
+  }
+  if (!hasOwn(object, "example")) {
+    issues.push(`${path}.example 必须填写与 schema 一致的完整示例值`);
+  }
+  if (isObject(object.schema) && hasOwn(object, "example")) {
+    validateSchemaExampleCoverage(object.schema, object.example, `${path}.schema`, `${path}.example`, issues);
+  }
+}
+
+function validateParameters(value: unknown, path: string, issues: string[]): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    issues.push(`${path} 如填写必须是数组`);
+    return;
+  }
+  value.forEach((parameter, index) => {
+    const itemPath = `${path}[${index}]`;
+    if (!isObject(parameter)) {
+      issues.push(`${itemPath} 必须是对象`);
+      return;
+    }
+    requireText(parameter, "name", itemPath, issues);
+    requireText(parameter, "description", itemPath, issues);
+    if (!["string", "integer", "number", "boolean", "array", "object"].includes(String(parameter.type))) {
+      issues.push(`${itemPath}.type 必须填写支持的参数类型`);
+    }
+    if (typeof parameter.required !== "boolean") {
+      issues.push(`${itemPath}.required 必须是布尔值`);
+    }
+    if (!hasOwn(parameter, "example")) {
+      issues.push(`${itemPath}.example 必须填写具体示例值`);
+    }
+  });
+}
+
+function rejectInternalInputTerms(value: unknown, path: string, issues: string[]): void {
+  if (typeof value === "string") {
+    if (/\binput\.(?:query|header|body|cookies)\b/i.test(value)) {
+      issues.push(`${path} 面向接口调用方，不得出现 input.query/input.header/input.body/input.cookies 等平台内部结构`);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => rejectInternalInputTerms(item, `${path}[${index}]`, issues));
+    return;
+  }
+  if (isObject(value)) {
+    for (const [key, item] of Object.entries(value)) {
+      rejectInternalInputTerms(item, `${path}.${key}`, issues);
+    }
+  }
+}
+
+export function interfaceDocCompletenessIssues(
+  document: unknown,
+  operation: "create" | "update",
+): string[] {
+  const issues: string[] = [];
+  if (!isObject(document)) return ["interface_doc 必须是 JSON 对象"];
+
+  rejectInternalInputTerms(document, "interface_doc", issues);
+
+  if (document.schema_version !== "script-interface-doc.v1") {
+    issues.push("interface_doc.schema_version 必须是 script-interface-doc.v1");
+  }
+  requireText(document, "title", "interface_doc", issues);
+  requireText(document, "summary", "interface_doc", issues);
+  requireText(document, "logic_description", "interface_doc", issues, 20);
+
+  let methods: unknown[] = [];
+  if (!isObject(document.endpoint)) {
+    issues.push("interface_doc.endpoint 必须是对象");
+  } else {
+    requireText(document.endpoint, "description", "interface_doc.endpoint", issues);
+    if (!Array.isArray(document.endpoint.methods) || document.endpoint.methods.length === 0) {
+      issues.push("interface_doc.endpoint.methods 必须包含 GET 或 POST");
+    } else {
+      methods = document.endpoint.methods;
+      if (methods.some((method) => method !== "GET" && method !== "POST")) {
+        issues.push("interface_doc.endpoint.methods 只能包含 GET 或 POST");
+      }
+    }
+    if (operation === "update") {
+      if (
+        typeof document.endpoint.path !== "string" ||
+        !document.endpoint.path.startsWith("/flow/codeblock/") ||
+        document.endpoint.path.includes("{script_id}")
+      ) {
+        issues.push("更新脚本时 interface_doc.endpoint.path 必须填写实际 /flow/codeblock/{script_id} 路径");
+      }
+    } else if (
+      document.endpoint.path !== undefined &&
+      (typeof document.endpoint.path !== "string" || !document.endpoint.path.startsWith("/flow/codeblock/"))
+    ) {
+      issues.push("interface_doc.endpoint.path 如填写，必须以 /flow/codeblock/ 开头");
+    }
+  }
+
+  const hasPost = methods.includes("POST");
+  if (document.request === undefined) {
+    // No request fields need documenting.
+  } else if (!isObject(document.request)) {
+    issues.push("interface_doc.request 如填写必须是对象");
+  } else {
+    validateParameters(document.request.query, "interface_doc.request.query", issues);
+    validateParameters(document.request.headers, "interface_doc.request.headers", issues);
+    if (document.request.body !== undefined) {
+      if (!hasPost) {
+        issues.push("仅 GET 接口不应填写 interface_doc.request.body");
+      } else if (!isObject(document.request.body)) {
+        issues.push("interface_doc.request.body 如填写必须是对象");
+      } else {
+        validateSchemaAndExample(document.request.body, "interface_doc.request.body", issues);
+      }
+    }
+  }
+
+  if (!Array.isArray(document.responses) || document.responses.length === 0) {
+    issues.push("interface_doc.responses 必须至少包含一个完整响应");
+  } else {
+    document.responses.forEach((response, index) => {
+      const path = `interface_doc.responses[${index}]`;
+      if (!isObject(response)) {
+        issues.push(`${path} 必须是对象`);
+        return;
+      }
+      if (!Number.isInteger(response.status) || Number(response.status) < 100 || Number(response.status) > 599) {
+        issues.push(`${path}.status 必须是 100-599 的整数`);
+      }
+      requireText(response, "description", path, issues);
+      validateSchemaAndExample(response, path, issues);
+    });
+  }
+
+  return issues;
+}
+
+export function assertCompleteInterfaceDoc(document: unknown, operation: "create" | "update"): void {
+  const issues = interfaceDocCompletenessIssues(document, operation);
+  if (issues.length > 0) {
+    throw new Error(
+      `interface_doc 完整性校验失败：\n- ${issues.join("\n- ")}\n修复规则：\n- ${interfaceDocNestedRules.join("\n- ")}`,
+    );
+  }
+}

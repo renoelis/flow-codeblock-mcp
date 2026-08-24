@@ -14,6 +14,7 @@
 1. 用户未说明时默认使用即时执行的非脚本模式和顶层 `return`。
 2. 用户要求 HTTP 重定向时必须使用脚本模式 `/flow/codeblock/{scriptId}`。
 3. 写代码前先确定模式、输入字段、同步/异步流程、输出方式和错误行为，不添加无关请求、模块、定时器或复杂抽象。
+4. 创建脚本时 `description` 用作列表展示名称；用户未指定名称时概括为不超过 15 个字符，用户明确给出较长名称时不要擅自截断。
 
 ## 输入契约
 
@@ -21,51 +22,18 @@
 
 ### 非脚本模式
 
-接口为 `POST /flow/codeblock`。请求体中的 `input` 原样注入全局 `input`，缺省为 `{}`。因此非脚本模式的 `input` 是业务参数对象本身：
-
-```javascript
-const name = input.name;
-const items = Array.isArray(input.items) ? input.items : [];
-```
-
-平台请求体：
-
-```json
-{
-  "codebase64": "<Base64 编码的 JavaScript>",
-  "input": {"name": "Alice", "items": [1, 2, 3]},
-  "qingcodeTimeout": 3000
-}
-```
+接口为 `POST /flow/codeblock`。请求体中的 `input` 原样注入全局 `input`，缺省为 `{}`；非脚本模式代码直接从 `input.<业务字段>` 读取。
 
 `codebase64` 是执行接口字段名；脚本管理工具中的字段名是 `code_base64`。
 
 ### 脚本模式
 
-接口为 `GET|POST /flow/codeblock/{scriptId}`。脚本模式的全局 `input` 是 HTTP 输入信封，不是业务对象本身：
-
-```javascript
-{
-  query: {},
-  header: {},
-  body: {},
-  cookies: {}
-}
-```
+接口为 `GET|POST /flow/codeblock/{scriptId}`。脚本模式的全局 `input` 是由服务端构建的 HTTP 输入信封，不是业务对象本身，包含 `query`、`header`、`body`、`cookies` 四个位置。
 
 - `input.query`：查询参数，不含 `qingcodeToken` 和 `qingcodeTimeout`；单值为字符串，重复参数为字符串数组。
 - `input.header`：请求头；服务端过滤 `x-original-cookie`，需要时从 `cookie` 头读取。
 - `input.body`：POST JSON 请求体；空请求体为 `{}`。
 - `input.cookies`：Cookie 键值对象；无 Cookie 时可能不存在。
-
-示例：
-
-```javascript
-const userId = input.query?.userId;
-const authorization = input.header?.authorization;
-const payload = input.body ?? {};
-const sessionId = input.cookies?.session_id;
-```
 
 脚本模式下 `qingcodeToken` 仅用于认证，`qingcodeTimeout` 仅用于配置超时，不会进入业务 query 或 body。
 
@@ -79,14 +47,26 @@ const sessionId = input.cookies?.session_id;
 
 ## 脚本接口文档
 
-脚本模式必须把接口契约作为独立 JSON 对象输出，并通过 `interface_doc` 提交。不得使用 JavaScript 注释承载方法、路径、参数、响应、认证或接口说明。JSON 必须符合 `script-interface-doc.v1`，完整约束见 `script-interface-doc.schema.json`。
+脚本模式必须把接口契约作为独立 JSON 对象输出，并通过 `interface_doc` 提交。不得使用 JavaScript 注释承载方法、路径、参数、响应、认证或接口说明。JSON 必须符合 `script-interface-doc.v1`；MCP 预览还会执行下列完整性门禁：
 
-- 必须包含 `schema_version` 和 `endpoint.methods`。
-- `endpoint.methods` 只能是 `GET`、`POST`；创建时 `endpoint.path` 可省略，更新时使用实际 `/flow/codeblock/{script_id}`。
-- `request.query`、`request.headers`、`request.body` 必须与代码实际读取的 `input.query`、`input.header`、`input.body` 一致。
-- `responses` 的状态码、Schema 和示例必须与代码实际返回值一致。
+- 文档必填 `schema_version/title/summary/endpoint/responses/logic_description`；无实际参数时 `request` 可省略，`usage_refs` 可省略。
+- `title` 是文档标题，`summary` 是一句话摘要，`logic_description` 必须说明输入、校验、处理步骤、外部调用、成功响应和错误分支。
+- `endpoint` 必填 `methods/description`；`path` 创建时可省略，更新时使用实际 `/flow/codeblock/{script_id}`；最终调用地址为用户提供的域名加 `/flow/codeblock/{{脚本ID}}`，用户未提供域名时先询问，不得猜测。
+- `endpoint.methods` 只能是 `GET`、`POST`。
+- 查询参数、请求头和请求体字段只有实际存在时才填写，并必须有名称、类型、描述和具体值；参数保留 `required` 表示运行时是否必填。
+- 需要描述 POST 请求体时填写 `content_type/schema/example`；每个响应必填 `status/description/content_type/schema/example`。
+- 响应 Schema 中每个字段必须填写 `type/description/example`；字段名称由 `properties` 的键表达。
+- 每个 Schema 节点写 `type`，字段节点再写 `description/example`；固定字段对象必须有完整 `properties`；动态键字典必须用 `additionalProperties` 描述值 Schema。
+- 每个数组必须有 `items`；对象数组必须有完整 `items.properties`，数组值中的每个对象必须覆盖全部字段。
+- 请求体和响应体任意层级的 `properties` 与对应值必须双向完全一致；运行时可选字段也必须出现在完整值中。
+- JSON Schema 的 `required` 只写运行时真正必填的业务字段；成功和错误结构不同应拆成不同响应。
+- `logic_description` 必须具体说明请求字段、校验、处理步骤、是否调用外部接口、成功响应和错误分支。
+- 文档面向调用方，只写查询参数、请求头、请求体和 Cookie；不得出现 `input.query`、`input.header`、`input.body`、`input.cookies` 等内部结构。调用方 POST 业务 JSON 直接放请求体，不包装为 `input`。
+- `usage_refs` 可省略，仅有真实应用引用时填写。
 - JSON 代码块只能包含合法 JSON 对象，不得混入 Markdown、注释或尾随逗号。
-- 文档、示例、代码和工具参数中不得出现真实 Token、密码、Cookie、Authorization 值或验证码。
+- 不提供预置业务示例；所有 `example` 值必须来自当前需求和代码实际行为。文档、代码和工具参数中不得出现真实 Token、密码、Cookie、Authorization 值或验证码。
+
+调用预览前必须按上述规则递归自检一次请求和所有响应；不要依靠重复调用预览工具逐项发现缺失字段。
 
 ## 原生能力和模块
 
@@ -115,6 +95,6 @@ const sessionId = input.cookies?.session_id;
 
 1. 先说明模式及输出方式。
 2. 输出完整、可直接执行的 `javascript` 代码块。
-3. 脚本模式紧接着输出独立的 `script-interface-doc.v1` JSON 代码块；非脚本模式输出 `POST /flow/codeblock` 请求示例。
+3. 脚本模式紧接着输出独立的 `script-interface-doc.v1` JSON 代码块；非脚本模式说明 `POST /flow/codeblock` 的调用字段和地址。
 4. 简述参数、行为、响应和错误处理。
 5. 检查输入来源、`return`/`qf_output` 二选一、异步生命周期、原生能力优先、禁止能力、可序列化结果和敏感信息。
