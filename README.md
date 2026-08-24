@@ -31,6 +31,8 @@ export FLOW_CODEBLOCK_TOKEN='flow_xxx'
 
 ## 客户端配置
 
+完整的安装、配置和故障排查步骤请阅读：[用户安装操作手册](docs/USER_INSTALLATION.md)。
+
 支持本地 stdio MCP 的客户端可以使用：
 
 ```json
