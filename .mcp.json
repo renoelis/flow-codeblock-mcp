@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "flow-codeblock": {
+      "title": "Flow Codeblock",
+      "description": "通过 Rust API 管理和执行 Flow Codeblock 脚本。",
+      "command": "bunx",
+      "args": ["--bun", "flow-codeblock-mcp@0.1.0"],
+      "env": {
+        "FLOW_CODEBLOCK_BASE_URL": "http://103.40.14.90:53002"
+      }
+    }
+  }
+}

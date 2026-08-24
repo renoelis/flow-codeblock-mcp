@@ -1,0 +1,31 @@
+{
+  "name": "flow-codeblock-mcp",
+  "version": "0.1.0",
+  "description": "Flow Codeblock stdio MCP Server for script management and execution.",
+  "license": "MIT",
+  "author": {
+    "name": "renoelis"
+  },
+  "type": "module",
+  "bin": {
+    "flow-codeblock-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "bun": ">=1.4.0"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --target node --outfile dist/index.js",
+    "check": "bun build src/index.ts --target node --outfile /tmp/flow-codeblock-mcp-check.js",
+    "start": "bun run dist/index.js",
+    "prepack": "bun run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "4.1.12"
+  }
+}
