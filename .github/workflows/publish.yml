@@ -20,6 +20,8 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-24.04
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -36,16 +38,14 @@ jobs:
         run: bun test mcp-server/src
 
       - name: Configure npm authentication
-        if: ${{ secrets.NPM_TOKEN != '' }}
+        if: ${{ env.NODE_AUTH_TOKEN != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
       - name: Publish version when needed
-        if: ${{ secrets.NPM_TOKEN != '' }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        if: ${{ env.NODE_AUTH_TOKEN != '' }}
         run: |
           set -euo pipefail
           package_name="$(node -p "require('./package.json').name")"
@@ -59,5 +59,5 @@ jobs:
           npm publish --access public --registry=https://registry.npmjs.org
 
       - name: Report missing npm credentials
-        if: ${{ secrets.NPM_TOKEN == '' }}
+        if: ${{ env.NODE_AUTH_TOKEN == '' }}
         run: echo "NPM_TOKEN is not configured; tests passed and npm publish was skipped."
