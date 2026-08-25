@@ -486,7 +486,7 @@ Token 掩码规则（`GET /flow/tokens`）：仅提供 `ws_id` 或仅提供 `ema
 
 #### GET /flow/scripts/{scriptId}
 - 认证：Token
-- 查询参数：`version`（可选）
+- 查询参数：`version`（可选；`0` 或省略表示当前版本，正整数表示指定历史版本）
 - 响应：
   - `data.available_versions`/`data.current_version`
   - `data.data[]`：每个版本包含 `id/version/description/code_base64/code_length/code_hash/created_at/updated_at/ip_whitelist`

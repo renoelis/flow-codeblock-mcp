@@ -35,7 +35,7 @@ afterAll(async () => {
 });
 
 describe("script read tool routes", () => {
-  test("keeps current reads version-free and adds version only for explicit history tools", async () => {
+  test("uses version zero for current script reads and positive versions only for explicit history tools", async () => {
     await client.callTool({ name: "flow_get_script", arguments: { script_id: "script-current" } });
     await client.callTool({
       name: "flow_get_script_version",
@@ -51,7 +51,7 @@ describe("script read tool routes", () => {
     });
 
     expect(requestTargets).toEqual([
-      "/flow/scripts/script-current",
+      "/flow/scripts/script-current?version=0",
       "/flow/scripts/script-history?version=3",
       "/flow/scripts/document-current/documentation",
       "/flow/scripts/document-history/documentation?version=2",
