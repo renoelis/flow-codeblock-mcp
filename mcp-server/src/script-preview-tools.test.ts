@@ -139,4 +139,62 @@ describe("script preview tool", () => {
     expect(content.text).toContain("本次已自动规范化");
     expect(content.text).toContain("interface_doc.request.body.properties 已移入");
   });
+
+  test("recovers document fields misplaced at the tool argument level", async () => {
+    const interfaceDoc = misplacedInterfaceDoc() as Record<string, unknown>;
+    const responses = interfaceDoc.responses;
+    const logicDescription = interfaceDoc.logic_description;
+    delete interfaceDoc.responses;
+    delete interfaceDoc.logic_description;
+    const request = interfaceDoc.request as Record<string, unknown>;
+    request.example = { name: "请求层示例" };
+
+    const response = await client.callTool({
+      name: "flow_preview_script_change",
+      arguments: {
+        operation: "create",
+        code: "return { success: true };",
+        interface_doc: interfaceDoc,
+        responses,
+        logic_description: logicDescription,
+      },
+    });
+
+    expect(response.isError).not.toBe(true);
+    const content = response.content.find((item) => item.type === "text");
+    if (!content || content.type !== "text") throw new Error("preview did not return text");
+    const preview = JSON.parse(content.text) as Record<string, unknown>;
+    const normalizations = preview.interface_doc_normalizations as string[];
+    expect(normalizations).toContain("工具参数 responses 已移入 interface_doc.responses");
+    expect(normalizations).toContain("工具参数 logic_description 已移入 interface_doc.logic_description");
+    expect(normalizations).toContain("interface_doc.request.example 已移入 interface_doc.request.body.example");
+
+    const normalizedDocument = validationRequest?.interface_doc as Record<string, unknown>;
+    const normalizedRequest = normalizedDocument.request as Record<string, unknown>;
+    const normalizedBody = normalizedRequest.body as Record<string, unknown>;
+    const normalizedResponses = normalizedDocument.responses as Array<Record<string, unknown>>;
+    expect(normalizedResponses).toHaveLength(1);
+    expect(normalizedResponses[0].status).toBe(200);
+    expect(normalizedResponses[0].example).toEqual({ success: true });
+    expect(normalizedDocument.logic_description).toBe(logicDescription);
+    expect(normalizedRequest.example).toBeUndefined();
+    expect(normalizedBody.example).toEqual({ name: "请求层示例" });
+  });
+
+  test("rejects misplaced document fields when interface_doc is absent", async () => {
+    const response = await client.callTool({
+      name: "flow_preview_script_change",
+      arguments: {
+        operation: "create",
+        code: "return { success: true };",
+        responses: [],
+        logic_description: "这段说明不能替代完整的接口文档对象。",
+      },
+    });
+
+    expect(response.isError).toBe(true);
+    const content = response.content.find((item) => item.type === "text");
+    if (!content || content.type !== "text") throw new Error("preview error did not return text");
+    expect(content.text).toContain("不能替代 interface_doc");
+  });
 });

@@ -142,6 +142,10 @@ describe("MCP tool metadata", () => {
     expect(interfaceDoc?.description).toContain("request={query?,headers?,body?}");
     expect(interfaceDoc?.description).toContain("请求体或响应体的根 Schema 节点必须填写 type");
     expect(interfaceDoc?.description).toContain("items 本身必须填写 type、description 和 example");
+    expect(byName.get("flow_preview_script_change")?.inputSchema.properties?.responses?.description)
+      .toContain("误放在工具参数层");
+    expect(byName.get("flow_preview_script_change")?.inputSchema.properties?.logic_description?.description)
+      .toContain("误放在工具参数层");
     expect(byName.get("flow_apply_script_change")?.description).toContain("用户提供的公网域名 + /flow/codeblock/");
   });
 

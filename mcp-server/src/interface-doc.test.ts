@@ -217,4 +217,25 @@ describe("interfaceDocCompletenessIssues", () => {
     expect((normalizedProperties.rows.items as Record<string, unknown>).example).toEqual({ profitSharing: false });
     expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
   });
+
+  test("moves request-level examples into the body and reports unsupported fields locally", () => {
+    const document = completePostDocument() as Record<string, unknown>;
+    const request = document.request as Record<string, unknown>;
+    const body = request.body as Record<string, unknown>;
+    request.example = { queryText: "请求层示例" };
+    delete body.example;
+
+    const normalized = normalizeInterfaceDocument(document);
+    expect(normalized.changes).toContain(
+      "interface_doc.request.example 已移入 interface_doc.request.body.example",
+    );
+    expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
+
+    const invalidDocument = normalized.document as Record<string, unknown>;
+    (invalidDocument.endpoint as Record<string, unknown>).unsupported = true;
+    (invalidDocument.request as Record<string, unknown>).unsupported = true;
+    const issues = interfaceDocCompletenessIssues(invalidDocument, "create");
+    expect(issues).toContain("interface_doc.endpoint.unsupported 不是支持的字段");
+    expect(issues).toContain("interface_doc.request.unsupported 不是支持的字段");
+  });
 });

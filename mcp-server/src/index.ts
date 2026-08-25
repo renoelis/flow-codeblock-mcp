@@ -207,7 +207,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.14" },
+  { name: "flow-codeblock", version: "0.2.15" },
   { instructions: serverInstructions },
 );
 
@@ -536,6 +536,12 @@ const changeSchema = {
     "允许调用脚本的 IP/CIDR 列表。省略=保持原值（创建时使用服务端默认）；null 或 []=清除限制；非空数组=设置白名单。单独修改不生成新版本。",
   ),
   interface_doc: z.unknown().optional().describe(interfaceDocInputDescription),
+  responses: z.unknown().optional().describe(
+    "仅用于兼容纠错：误放在工具参数层的接口响应会自动移入 interface_doc.responses；新调用必须直接写入 interface_doc。",
+  ),
+  logic_description: z.unknown().optional().describe(
+    "仅用于兼容纠错：误放在工具参数层的逻辑说明会自动移入 interface_doc.logic_description；新调用必须直接写入 interface_doc。",
+  ),
   expected_version: z.number().int().positive().optional().describe(
     "仅 update 必填；必须取自刚刚 flow_get_script 返回的 current_version。版本变化会返回 409，此时重新读取并重新预览。create 时必须省略。",
   ),
@@ -552,12 +558,26 @@ server.registerTool(
   async (input) => {
     try {
       purgePreviews();
-      const interfaceDocNormalization = input.interface_doc === undefined
+      const {
+        responses: misplacedResponses,
+        logic_description: misplacedLogicDescription,
+        ...changeInput
+      } = input;
+      if (
+        changeInput.interface_doc === undefined &&
+        (misplacedResponses !== undefined || misplacedLogicDescription !== undefined)
+      ) {
+        throw new Error("工具参数 responses/logic_description 只能用于纠正已有 interface_doc，不能替代 interface_doc");
+      }
+      const interfaceDocNormalization = changeInput.interface_doc === undefined
         ? { document: undefined, changes: [] }
-        : normalizeInterfaceDocument(input.interface_doc);
-      const preparedInput = input.interface_doc === undefined
-        ? input
-        : { ...input, interface_doc: interfaceDocNormalization.document };
+        : normalizeInterfaceDocument(changeInput.interface_doc, {
+            responses: misplacedResponses,
+            logic_description: misplacedLogicDescription,
+          });
+      const preparedInput = changeInput.interface_doc === undefined
+        ? changeInput
+        : { ...changeInput, interface_doc: interfaceDocNormalization.document };
       try {
         assertScriptChangeInput(preparedInput);
       } catch (error) {

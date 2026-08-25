@@ -68,7 +68,7 @@
 
 调用预览前必须按上述规则递归自检一次请求和所有响应；不要依靠重复调用预览工具逐项发现缺失字段。
 
-规范结构中，请求体和每个响应的完整 `example` 与 `schema` 同级，`properties/required/items/additionalProperties` 放在 `schema` 内。MCP 会在预览前兼容纠正这两类无歧义的位置错误，从父级示例或同名蛇形/驼峰别名补全可推导的节点示例，并移除 `usage_refs` 中无效的非对象条目；预览成功时通过 `interface_doc_normalizations` 返回修正记录，仍有错误时在错误文本的“本次已自动规范化”中返回。保留原文档和所有未报错字段，只修正错误列表中的准确路径；不要重写整份文档，也不要删除已有的 `responses`、`logic_description` 或 `request`。
+`responses/logic_description` 必须放在 `interface_doc` 根对象内，不能放在 `flow_preview_script_change` 的工具参数层；请求体和每个响应的完整 `example` 与 `schema` 同级，`request.example` 应写成 `request.body.example`，`properties/required/items/additionalProperties` 放在 `schema` 内。MCP 会在预览前兼容纠正这些无歧义的位置错误，从父级示例或同名蛇形/驼峰别名补全可推导的节点示例，并移除 `usage_refs` 中无效的非对象条目；预览成功时通过 `interface_doc_normalizations` 返回修正记录，仍有错误时在错误文本的“本次已自动规范化”中返回。保留原文档和所有未报错字段，只修正错误列表中的准确路径；不要重写整份文档，也不要删除已有的 `responses`、`logic_description` 或 `request`。
 
 ## 原生能力和模块
 

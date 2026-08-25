@@ -1,5 +1,10 @@
 type JsonObject = Record<string, unknown>;
 
+export type InterfaceDocRecoveryFields = {
+  responses?: unknown;
+  logic_description?: unknown;
+};
+
 export const interfaceDocRequiredFields = {
   document: ["schema_version", "title", "summary", "endpoint", "responses", "logic_description"],
   endpoint: ["methods", "description"],
@@ -20,7 +25,7 @@ export const interfaceDocNestedRules = [
 
 export const interfaceDocRepairRules = [
   "保留原 interface_doc 中未报错的字段，只修正错误列表指出的路径；不要为了修复单个字段而重写或删减 responses、logic_description 或 request。",
-  "规范结构中 request.body 和每个 response 的 example 与 schema 同级；properties、required、items、additionalProperties 属于 schema。MCP 会兼容纠正常见错位、从父级或同名蛇形/驼峰别名补全可推导的节点 example，并移除 usage_refs 中无效的非对象说明。",
+  "responses 和 logic_description 属于 interface_doc 根对象，request.body.example 与 schema 同级，properties、required、items、additionalProperties 属于 schema。MCP 会兼容纠正常见错位、从父级或同名蛇形/驼峰别名补全可推导的节点 example，并移除 usage_refs 中无效的非对象说明。",
 ];
 
 export const interfaceDocInputDescription = [
@@ -159,13 +164,42 @@ function normalizeUsageRefs(document: JsonObject, changes: string[]): void {
   );
 }
 
-export function normalizeInterfaceDocument(document: unknown): { document: unknown; changes: string[] } {
+function recoverInterfaceDocRootFields(
+  document: JsonObject,
+  recoveryFields: InterfaceDocRecoveryFields,
+  changes: string[],
+): void {
+  for (const key of ["responses", "logic_description"] as const) {
+    if (recoveryFields[key] === undefined) continue;
+    if (hasOwn(document, key)) {
+      changes.push(`工具参数 ${key} 已忽略；interface_doc.${key} 已存在`);
+      continue;
+    }
+    document[key] = structuredClone(recoveryFields[key]);
+    changes.push(`工具参数 ${key} 已移入 interface_doc.${key}`);
+  }
+}
+
+export function normalizeInterfaceDocument(
+  document: unknown,
+  recoveryFields: InterfaceDocRecoveryFields = {},
+): { document: unknown; changes: string[] } {
   if (!isObject(document)) return { document, changes: [] };
 
   const normalized = structuredClone(document) as JsonObject;
   const changes: string[] = [];
+  recoverInterfaceDocRootFields(normalized, recoveryFields, changes);
   normalizeUsageRefs(normalized, changes);
   if (isObject(normalized.request) && isObject(normalized.request.body)) {
+    if (hasOwn(normalized.request, "example")) {
+      if (!hasOwn(normalized.request.body, "example")) {
+        normalized.request.body.example = structuredClone(normalized.request.example);
+        changes.push("interface_doc.request.example 已移入 interface_doc.request.body.example");
+      } else {
+        changes.push("interface_doc.request.example 已移除；interface_doc.request.body.example 已存在");
+      }
+      delete normalized.request.example;
+    }
     normalizeSchemaContainer(normalized.request.body, "interface_doc.request.body", changes);
   }
   if (Array.isArray(normalized.responses)) {
@@ -182,6 +216,19 @@ function requireText(object: JsonObject, key: string, path: string, issues: stri
   const value = object[key];
   if (typeof value !== "string" || value.trim().length < minLength) {
     issues.push(`${path}.${key} 必须是至少 ${minLength} 个字符的非空字符串`);
+  }
+}
+
+function rejectUnsupportedFields(
+  object: JsonObject,
+  supportedFields: readonly string[],
+  path: string,
+  issues: string[],
+): void {
+  for (const key of Object.keys(object)) {
+    if (!supportedFields.includes(key)) {
+      issues.push(`${path}.${key} 不是支持的字段`);
+    }
   }
 }
 
@@ -317,6 +364,12 @@ function validateParameters(value: unknown, path: string, issues: string[]): voi
       issues.push(`${itemPath} 必须是对象`);
       return;
     }
+    rejectUnsupportedFields(
+      parameter,
+      ["name", "type", "required", "description", "example", "default", "format", "enum_values"],
+      itemPath,
+      issues,
+    );
     requireText(parameter, "name", itemPath, issues);
     requireText(parameter, "description", itemPath, issues);
     if (!["string", "integer", "number", "boolean", "array", "object"].includes(String(parameter.type))) {
@@ -386,6 +439,12 @@ export function interfaceDocCompletenessIssues(
   if (!isObject(document)) return ["interface_doc 必须是 JSON 对象"];
 
   rejectInternalInputTerms(document, "interface_doc", issues);
+  rejectUnsupportedFields(
+    document,
+    ["schema_version", "title", "summary", "endpoint", "request", "responses", "logic_description", "usage_refs"],
+    "interface_doc",
+    issues,
+  );
 
   if (document.schema_version !== "script-interface-doc.v1") {
     issues.push("interface_doc.schema_version 必须是 script-interface-doc.v1");
@@ -399,6 +458,7 @@ export function interfaceDocCompletenessIssues(
   if (!isObject(document.endpoint)) {
     issues.push("interface_doc.endpoint 必须是对象");
   } else {
+    rejectUnsupportedFields(document.endpoint, ["methods", "path", "description"], "interface_doc.endpoint", issues);
     requireText(document.endpoint, "description", "interface_doc.endpoint", issues);
     if (!Array.isArray(document.endpoint.methods) || document.endpoint.methods.length === 0) {
       issues.push("interface_doc.endpoint.methods 必须包含 GET 或 POST");
@@ -430,6 +490,7 @@ export function interfaceDocCompletenessIssues(
   } else if (!isObject(document.request)) {
     issues.push("interface_doc.request 如填写必须是对象");
   } else {
+    rejectUnsupportedFields(document.request, ["query", "headers", "body"], "interface_doc.request", issues);
     validateParameters(document.request.query, "interface_doc.request.query", issues);
     validateParameters(document.request.headers, "interface_doc.request.headers", issues);
     if (document.request.body !== undefined) {
@@ -438,6 +499,12 @@ export function interfaceDocCompletenessIssues(
       } else if (!isObject(document.request.body)) {
         issues.push("interface_doc.request.body 如填写必须是对象");
       } else {
+        rejectUnsupportedFields(
+          document.request.body,
+          ["content_type", "schema", "example"],
+          "interface_doc.request.body",
+          issues,
+        );
         validateSchemaAndExample(document.request.body, "interface_doc.request.body", issues);
       }
     }
@@ -452,6 +519,7 @@ export function interfaceDocCompletenessIssues(
         issues.push(`${path} 必须是对象`);
         return;
       }
+      rejectUnsupportedFields(response, ["status", "description", "content_type", "schema", "example"], path, issues);
       if (!Number.isInteger(response.status) || Number(response.status) < 100 || Number(response.status) > 599) {
         issues.push(`${path}.status 必须是 100-599 的整数`);
       }
