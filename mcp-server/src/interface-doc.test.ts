@@ -86,6 +86,53 @@ describe("interfaceDocCompletenessIssues", () => {
     expect(issues.some((issue) => issue.includes("properties.success.example"))).toBe(true);
   });
 
+  test("rejects damaged schema keywords and nested examples copied from an outer response", () => {
+    const document = completePostDocument();
+    const responseSchema = document.responses[0].schema as Record<string, unknown>;
+    const properties = responseSchema.properties as Record<string, unknown>;
+    properties.data = {
+      type: "object",
+      description: "距离计算结果",
+      properties: {
+        distance_m: field("number", "距离，单位为米", 2300),
+      },
+      required: ["distance_m"],
+      additionalProperties: false,
+      example: { success: true, data: { distance_m: 2300 } },
+    };
+    responseSchema.required = ["success", "data"];
+    document.responses[0].example = { success: true, data: { distance_m: 2300 } };
+    responseSchema[":{"] = 0;
+
+    const issues = interfaceDocCompletenessIssues(document, "create");
+    expect(issues).toContain("interface_doc.responses[0].schema.:{ 不是合法的 JSON Schema 关键字");
+    expect(issues).toContain(
+      "interface_doc.responses[0].schema.properties.data.example 缺少 required 字段 distance_m",
+    );
+    expect(issues).toContain(
+      "interface_doc.responses[0].schema.properties.data.properties 缺少字段 success 的 Schema 描述",
+    );
+  });
+
+  test("allows standard and extension schema keyword names", () => {
+    const document = completePostDocument();
+    const responseSchema = document.responses[0].schema as Record<string, unknown>;
+    responseSchema.$comment = "success response";
+    responseSchema["x-field-order"] = ["success"];
+
+    expect(interfaceDocCompletenessIssues(document, "create")).toEqual([]);
+  });
+
+  test("validates primitive field examples independently from wrapper examples", () => {
+    const document = completePostDocument();
+    document.responses[0].schema.properties.success.example = "true";
+
+    const issues = interfaceDocCompletenessIssues(document, "create");
+    expect(issues).toContain(
+      "interface_doc.responses[0].schema.properties.success.example 类型必须与 interface_doc.responses[0].schema.properties.success.type=boolean 一致",
+    );
+  });
+
   test("requires description and example on array items", () => {
     const document = completePostDocument();
     document.responses[0].schema.properties.values = {

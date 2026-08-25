@@ -129,6 +129,8 @@ describe("script preview tool", () => {
     const content = response.content.find((item) => item.type === "text");
     if (!content || content.type !== "text") throw new Error("preview did not return text");
     const preview = JSON.parse(content.text) as Record<string, unknown>;
+    expect(preview.preview_ready).toBe(true);
+    expect(preview.requires_repreview).toBe(false);
     expect(preview.interface_doc_normalizations).toEqual([
       "interface_doc.usage_refs 已移除 1 个非对象条目；普通说明应写入 logic_description",
       "interface_doc.request.body.properties 已移入 interface_doc.request.body.schema.properties",

@@ -28,6 +28,8 @@ export const interfaceDocRequiredFields = {
 
 export const interfaceDocNestedRules = [
   "请求体或响应体的根 Schema 节点必须填写 type；其所有嵌套 Schema 节点（包括 properties 字段、array.items 和对象形式 additionalProperties 的值 Schema）都必须填写 type、description 和 example。",
+  "每个 Schema 节点自身的 example 都必须与该节点的 type、properties 和 required 一致；不能把外层完整响应示例误放进某个内层字段的 example。",
+  "JSON Schema 关键字名称只能使用字母开头的标准/扩展标识形式（可带 $ 前缀、数字、下划线、点或连字符）；:{ 等损坏键名必须删除。properties 内的业务字段名不受此限制。",
   "代码或 example 中键名已知的对象必须用 properties 逐项描述；对象形式 additionalProperties 仅用于键名运行时才确定且所有值结构相同的动态字典，并描述单个动态值的完整 Schema。只有脚本原样透传且无法从代码、接口契约或示例确定结构的上游 JSON 对象，才使用 additionalProperties=true；不得用 type=object、example={} 的 additionalProperties 作为任意 JSON 值的兜底。",
   "每个 type=array 都必须有 items，且 items 本身必须填写 type、description 和 example；items.type=object 时还必须有完整 items.properties。数组 example 中的每个对象都必须覆盖 items.properties 的全部字段。",
   "任意层级 example 中出现的字段必须有对应 properties 或 additionalProperties，且 example 的 JSON 类型必须与 type 一致；properties 中列入 required 的字段必须出现在 example 中，运行时可选字段可以省略。",
@@ -517,6 +519,15 @@ function validateSchemaExampleCoverage(
     validateFieldSchemaMetadata(schema, schemaPath, issues);
   }
 
+  if (
+    schema.type !== "array" &&
+    schema.type !== "object" &&
+    !exampleMatchesType(schema.type, example)
+  ) {
+    issues.push(`${examplePath} 类型必须与 ${schemaPath}.type=${String(schema.type)} 一致`);
+    return;
+  }
+
   if (schema.type === "array") {
     if (!Array.isArray(example)) {
       issues.push(`${examplePath} 必须是数组`);
@@ -606,6 +617,58 @@ function validateSchemaExampleCoverage(
   }
 }
 
+const schemaKeywordPattern = /^\$?[A-Za-z][A-Za-z0-9_.-]*$/;
+
+function validateSchemaKeywordNames(schema: JsonObject, path: string, issues: string[]): void {
+  for (const key of Object.keys(schema)) {
+    if (!schemaKeywordPattern.test(key)) {
+      issues.push(`${path}.${key} 不是合法的 JSON Schema 关键字`);
+    }
+  }
+
+  if (isObject(schema.properties)) {
+    for (const [name, propertySchema] of Object.entries(schema.properties)) {
+      if (isObject(propertySchema)) {
+        validateSchemaKeywordNames(propertySchema, `${path}.properties.${name}`, issues);
+      }
+    }
+  }
+  if (isObject(schema.items)) {
+    validateSchemaKeywordNames(schema.items, `${path}.items`, issues);
+  }
+  if (isObject(schema.additionalProperties)) {
+    validateSchemaKeywordNames(schema.additionalProperties, `${path}.additionalProperties`, issues);
+  }
+}
+
+function validateDeclaredSchemaExamples(schema: JsonObject, path: string, issues: string[]): void {
+  if (hasOwn(schema, "example")) {
+    validateSchemaExampleCoverage(
+      schema,
+      schema.example,
+      path,
+      `${path}.example`,
+      issues,
+      false,
+      true,
+    );
+  }
+
+  if (isObject(schema.properties)) {
+    for (const [name, propertySchema] of Object.entries(schema.properties)) {
+      if (isObject(propertySchema)) {
+        validateDeclaredSchemaExamples(propertySchema, `${path}.properties.${name}`, issues);
+      }
+    }
+  }
+  if (isObject(schema.items)) {
+    validateDeclaredSchemaExamples(schema.items, `${path}.items`, issues);
+  }
+  if (isObject(schema.additionalProperties)) {
+    validateDeclaredSchemaExamples(schema.additionalProperties, `${path}.additionalProperties`, issues);
+  }
+}
+
 function validateSchemaAndExample(object: JsonObject, path: string, issues: string[]): void {
   if (object.content_type !== "application/json") {
     issues.push(`${path}.content_type 必须是 application/json`);
@@ -616,8 +679,12 @@ function validateSchemaAndExample(object: JsonObject, path: string, issues: stri
   if (!hasOwn(object, "example")) {
     issues.push(`${path}.example 必须填写与 schema 一致的完整示例值`);
   }
-  if (isObject(object.schema) && hasOwn(object, "example")) {
-    validateSchemaExampleCoverage(object.schema, object.example, `${path}.schema`, `${path}.example`, issues);
+  if (isObject(object.schema)) {
+    validateSchemaKeywordNames(object.schema, `${path}.schema`, issues);
+    validateDeclaredSchemaExamples(object.schema, `${path}.schema`, issues);
+    if (hasOwn(object, "example")) {
+      validateSchemaExampleCoverage(object.schema, object.example, `${path}.schema`, `${path}.example`, issues);
+    }
   }
 }
 

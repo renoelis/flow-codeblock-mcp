@@ -41,7 +41,7 @@ MCP 所有工具的 JSON 出参都会递归脱敏 `token`、`access_token`、`au
 3. 展示预览结果。只有用户明确确认后，才调用 `flow_apply_script_change`，传 `preview_id` 和 `confirm: true`。
 4. 创建成功后调用 `flow_execute_script`，其 `body` 参数直接传业务 JSON，报告执行和配额结果。
 
-只有工具成功返回 `preview_id` 才能声称预览通过；`isError=true`、`-32602` 或没有 `preview_id` 时必须明确报告失败。`create` 不应传 `expected_version`，MCP 会兼容忽略误传的 `expected_version=0`。创建或更新发布成功后使用 `flow_apply_script_change.data.script_url`，执行脚本时使用 `flow_execute_script.script_url`。
+只有工具成功返回 `preview_id` 才能声称预览通过；此时 `input_normalizations` 和 `interface_doc_normalizations` 已写入当前待发布预览，`preview_ready=true`、`requires_repreview=false`，必须展示纠正结果并等待用户确认，不得仅因发生兼容纠正就重写整份文档或再次预览。`isError=true`、`-32602` 或没有 `preview_id` 时才表示失败，此时只修正错误指出的路径。`create` 不应传 `expected_version`，MCP 会兼容忽略误传的 `expected_version=0`。创建或更新发布成功后使用 `flow_apply_script_change.data.script_url`，执行脚本时使用 `flow_execute_script.script_url`。
 
 创建时 `description` 是脚本列表展示名称。用户未指定名称时，根据需求概括为不超过 15 个字符；用户明确给出较长名称时保留原意，不要擅自截断。
 
@@ -65,6 +65,7 @@ MCP 预览与 Flow Codeblock 页面、Rust 文档接口使用同一套必填契�
 - 每个 `type: "array"` 必须有 `items`，且 `items` 本身也必须填写 `type/description/example`；对象数组还必须有完整 `items.properties`；
 - 数组值中的每个对象都必须包含 `items.properties` 的全部字段；
 - 任意层级示例中出现的字段必须有对应 `properties` 或 `additionalProperties`，且示例的 JSON 类型必须与 `type` 一致；列入 `required` 的字段必须出现在示例中，运行时可选字段可以省略；
+- 每个 Schema 节点自身的 `example` 必须与该节点的 `type/properties/required` 一致，不能把完整外层响应误放进内层字段的 `example`；Schema 关键字名称必须是正常的标准或扩展标识，删除 `:{` 等损坏键名；
 - JSON Schema 的 `required` 只声明运行时真正必填的业务字段；成功、错误结构不同应拆成不同 `responses`，同一状态码下不同错误结构也应拆开描述。
 
 `interface_doc` 根对象只放 `schema_version/title/summary/endpoint/request/responses/logic_description/usage_refs`；`request` 只放 `query/headers/body`；`ip_whitelist` 是 `flow_preview_script_change` 的工具参数，不放进 `interface_doc`。`responses/logic_description` 必须放在 `interface_doc` 根对象内；请求体和每个响应的完整 `example` 与 `schema` 同级，`request.example` 应写成 `request.body.example`，`properties/required/items/additionalProperties` 放在 `schema` 内。MCP 会在预览前兼容纠正这些无歧义的位置错误，从父级示例或同名蛇形/驼峰别名补全可推导的节点示例，并移除 `usage_refs` 中无效的非对象条目；预览成功时通过 `interface_doc_normalizations` 返回修正记录，仍有错误时在错误文本的“本次已自动规范化”中返回。必须保留原文档及所有未报错字段，只修正错误列表中的准确路径；不得重写整份文档或删除 `responses`、`logic_description`、`request`。

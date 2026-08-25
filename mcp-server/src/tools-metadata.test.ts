@@ -56,6 +56,7 @@ describe("MCP tool metadata", () => {
     expect(instructions).toContain("flow_release_script_ownership");
     expect(instructions).toContain("只有工具成功返回 preview_id");
     expect(instructions).toContain("漏传时 MCP 根据 script_id 是否存在推断 create/update");
+    expect(instructions).toContain("不得仅因发生兼容纠正就重写文档或再次预览");
     expect(instructions).toContain("禁止读取 process.env");
     expect(tools.map((tool) => tool.name).sort()).toEqual(expectedToolNames);
     expect(tools.some((tool) => tool.name.includes("delete"))).toBe(false);
@@ -137,6 +138,7 @@ describe("MCP tool metadata", () => {
     expect(byName.get("flow_preview_script_change")?.description).toContain("interface_doc_normalizations");
     expect(byName.get("flow_preview_script_change")?.description).toContain("保留原文档");
     expect(byName.get("flow_preview_script_change")?.description).toContain("无需因此重新预览");
+    expect(byName.get("flow_preview_script_change")?.description).toContain("requires_repreview=false");
     expect(byName.get("flow_preview_script_change")?.description).toContain("漏传时 MCP 会按 script_id 是否存在推断");
     expect(byName.get("flow_preview_script_change")?.inputSchema.required ?? []).not.toContain("operation");
     expect(byName.get("flow_preview_script_change")?.inputSchema.properties?.operation?.description)
