@@ -207,7 +207,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.16" },
+  { name: "flow-codeblock", version: "0.2.17" },
   { instructions: serverInstructions },
 );
 
@@ -570,14 +570,29 @@ server.registerTool(
         throw new Error("工具参数 responses/logic_description 只能用于纠正已有 interface_doc，不能替代 interface_doc");
       }
       const interfaceDocNormalization = changeInput.interface_doc === undefined
-        ? { document: undefined, changes: [] }
+        ? { document: undefined, changes: [], recovered: {} }
         : normalizeInterfaceDocument(changeInput.interface_doc, {
             responses: misplacedResponses,
             logic_description: misplacedLogicDescription,
           });
+      if (
+        changeInput.ip_whitelist !== undefined &&
+        Object.prototype.hasOwnProperty.call(interfaceDocNormalization.recovered, "ip_whitelist")
+      ) {
+        delete interfaceDocNormalization.recovered.ip_whitelist;
+        interfaceDocNormalization.changes.push(
+          "interface_doc.ip_whitelist 已忽略；工具参数 ip_whitelist 已存在",
+        );
+      }
       const preparedInput = changeInput.interface_doc === undefined
         ? changeInput
-        : { ...changeInput, interface_doc: interfaceDocNormalization.document };
+        : {
+            ...changeInput,
+            ...(Object.prototype.hasOwnProperty.call(interfaceDocNormalization.recovered, "ip_whitelist")
+              ? { ip_whitelist: interfaceDocNormalization.recovered.ip_whitelist }
+              : {}),
+            interface_doc: interfaceDocNormalization.document,
+          };
       try {
         assertScriptChangeInput(preparedInput);
       } catch (error) {

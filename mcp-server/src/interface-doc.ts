@@ -5,6 +5,14 @@ export type InterfaceDocRecoveryFields = {
   logic_description?: unknown;
 };
 
+export type InterfaceDocNormalization = {
+  document: unknown;
+  changes: string[];
+  recovered: {
+    ip_whitelist?: unknown;
+  };
+};
+
 export const interfaceDocRequiredFields = {
   document: ["schema_version", "title", "summary", "endpoint", "responses", "logic_description"],
   endpoint: ["methods", "description"],
@@ -28,6 +36,8 @@ export const interfaceDocRepairRules = [
   "responses 和 logic_description 属于 interface_doc 根对象，request.body.example 与 schema 同级，properties、required、items、additionalProperties 属于 schema。MCP 会兼容纠正常见错位、从父级或同名蛇形/驼峰别名补全可推导的节点 example，并移除 usage_refs 中无效的非对象说明。",
   "对象字段已能从代码或 example 确定时，在该对象上使用 properties 逐项描述；只有键名未知且每个动态值都符合同一 Schema 时才使用 additionalProperties。错误路径以 .additionalProperties 结尾且父对象键名已知时，应修正父对象的 properties，不要继续嵌套空 additionalProperties。",
   "每个 example 的类型必须与对应 type 一致；同一状态码存在字符串错误和对象错误等不同结构时，拆成多个 responses 分别描述。",
+  "interface_doc 根对象只允许 schema_version/title/summary/endpoint/request/responses/logic_description/usage_refs；request 只允许 query/headers/body。ip_whitelist 是 flow_preview_script_change 的工具参数，不属于 interface_doc。",
+  "schema.properties 只能放字段名到字段 Schema 的映射；schema.required 必须与 properties 同级，不能把 required: [] 放进 properties。",
 ];
 
 export const interfaceDocInputDescription = [
@@ -69,6 +79,18 @@ function normalizeSchemaNodeExamples(
   }
 
   if (schema.type !== "object") return;
+  const misplacedRequired = isObject(schema.properties) && Array.isArray(schema.properties.required)
+    ? schema.properties.required
+    : undefined;
+  if (misplacedRequired && misplacedRequired.every((field) => typeof field === "string")) {
+    if (!hasOwn(schema, "required")) {
+      schema.required = structuredClone(misplacedRequired);
+      changes.push(`${path}.properties.required 已移入 ${path}.required`);
+    } else {
+      changes.push(`${path}.properties.required 已移除；${path}.required 已存在`);
+    }
+    delete (schema.properties as JsonObject).required;
+  }
   const properties = isObject(schema.properties) ? schema.properties : undefined;
   const objectExample = isObject(example) ? example : undefined;
   if (properties) {
@@ -182,14 +204,36 @@ function recoverInterfaceDocRootFields(
   }
 }
 
+function recoverRequestRootFields(document: JsonObject, changes: string[]): void {
+  if (!isObject(document.request)) return;
+  for (const key of ["responses", "logic_description"] as const) {
+    if (!hasOwn(document.request, key)) continue;
+    if (hasOwn(document, key)) {
+      delete document.request[key];
+      changes.push(`interface_doc.request.${key} 已移除；interface_doc.${key} 已存在`);
+      continue;
+    }
+    document[key] = document.request[key];
+    delete document.request[key];
+    changes.push(`interface_doc.request.${key} 已移入 interface_doc.${key}`);
+  }
+}
+
 export function normalizeInterfaceDocument(
   document: unknown,
   recoveryFields: InterfaceDocRecoveryFields = {},
-): { document: unknown; changes: string[] } {
-  if (!isObject(document)) return { document, changes: [] };
+): InterfaceDocNormalization {
+  if (!isObject(document)) return { document, changes: [], recovered: {} };
 
   const normalized = structuredClone(document) as JsonObject;
   const changes: string[] = [];
+  const recovered: InterfaceDocNormalization["recovered"] = {};
+  if (hasOwn(normalized, "ip_whitelist")) {
+    recovered.ip_whitelist = normalized.ip_whitelist;
+    delete normalized.ip_whitelist;
+    changes.push("interface_doc.ip_whitelist 已移回 flow_preview_script_change.ip_whitelist");
+  }
+  recoverRequestRootFields(normalized, changes);
   recoverInterfaceDocRootFields(normalized, recoveryFields, changes);
   normalizeUsageRefs(normalized, changes);
   if (isObject(normalized.request) && isObject(normalized.request.body)) {
@@ -211,7 +255,7 @@ export function normalizeInterfaceDocument(
       }
     });
   }
-  return { document: normalized, changes };
+  return { document: normalized, changes, recovered };
 }
 
 function requireText(object: JsonObject, key: string, path: string, issues: string[], minLength = 1): void {

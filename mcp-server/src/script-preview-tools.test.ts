@@ -181,6 +181,40 @@ describe("script preview tool", () => {
     expect(normalizedBody.example).toEqual({ name: "请求层示例" });
   });
 
+  test("recovers request root fields and whitelist misplaced inside interface_doc", async () => {
+    const interfaceDoc = misplacedInterfaceDoc() as Record<string, unknown>;
+    const request = interfaceDoc.request as Record<string, unknown>;
+    request.responses = interfaceDoc.responses;
+    request.logic_description = interfaceDoc.logic_description;
+    delete interfaceDoc.responses;
+    delete interfaceDoc.logic_description;
+    interfaceDoc.ip_whitelist = ["203.0.113.10"];
+
+    const response = await client.callTool({
+      name: "flow_preview_script_change",
+      arguments: {
+        operation: "create",
+        code: "return { success: true };",
+        interface_doc: interfaceDoc,
+      },
+    });
+
+    expect(response.isError).not.toBe(true);
+    const content = response.content.find((item) => item.type === "text");
+    if (!content || content.type !== "text") throw new Error("preview did not return text");
+    const preview = JSON.parse(content.text) as Record<string, unknown>;
+    expect(preview.interface_doc_normalizations).toEqual(expect.arrayContaining([
+      "interface_doc.request.responses 已移入 interface_doc.responses",
+      "interface_doc.request.logic_description 已移入 interface_doc.logic_description",
+      "interface_doc.ip_whitelist 已移回 flow_preview_script_change.ip_whitelist",
+    ]));
+    expect((validationRequest as Record<string, unknown>).ip_whitelist).toEqual(["203.0.113.10"]);
+    const normalized = (validationRequest as Record<string, unknown>).interface_doc as Record<string, unknown>;
+    expect(normalized.responses).toHaveLength(1);
+    expect(normalized.logic_description).toBeDefined();
+    expect(normalized.ip_whitelist).toBeUndefined();
+  });
+
   test("rejects misplaced document fields when interface_doc is absent", async () => {
     const response = await client.callTool({
       name: "flow_preview_script_change",

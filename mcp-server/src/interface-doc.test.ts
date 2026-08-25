@@ -157,6 +157,48 @@ describe("interfaceDocCompletenessIssues", () => {
     expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
   });
 
+  test("recovers required arrays misplaced inside schema properties", () => {
+    const document = completePostDocument();
+    const bodySchema = document.request.body.schema as Record<string, unknown>;
+    const properties = bodySchema.properties as Record<string, unknown>;
+    properties.required = ["queryText"];
+    delete bodySchema.required;
+    const responseSchema = document.responses[0].schema as Record<string, unknown>;
+    const responseProperties = responseSchema.properties as Record<string, unknown>;
+    responseProperties.required = ["success"];
+    delete responseSchema.required;
+
+    const normalized = normalizeInterfaceDocument(document);
+    expect(normalized.changes).toContain(
+      "interface_doc.request.body.schema.properties.required 已移入 interface_doc.request.body.schema.required",
+    );
+    expect(normalized.changes).toContain(
+      "interface_doc.responses[0].schema.properties.required 已移入 interface_doc.responses[0].schema.required",
+    );
+    expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
+  });
+
+  test("recovers root fields and tool fields misplaced inside interface_doc", () => {
+    const document = completePostDocument() as Record<string, unknown>;
+    const request = document.request as Record<string, unknown>;
+    request.responses = document.responses;
+    request.logic_description = document.logic_description;
+    delete document.responses;
+    delete document.logic_description;
+    document.ip_whitelist = ["203.0.113.10"];
+
+    const normalized = normalizeInterfaceDocument(document);
+    const normalizedDocument = normalized.document as Record<string, unknown>;
+    expect(normalized.changes).toContain("interface_doc.request.responses 已移入 interface_doc.responses");
+    expect(normalized.changes).toContain("interface_doc.request.logic_description 已移入 interface_doc.logic_description");
+    expect(normalized.changes).toContain("interface_doc.ip_whitelist 已移回 flow_preview_script_change.ip_whitelist");
+    expect(normalizedDocument.responses).toHaveLength(1);
+    expect(normalizedDocument.logic_description).toBeDefined();
+    expect(normalizedDocument.ip_whitelist).toBeUndefined();
+    expect(normalized.recovered.ip_whitelist).toEqual(["203.0.113.10"]);
+    expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
+  });
+
   test("allows optional properties to be omitted from wrapper examples", () => {
     const document = completePostDocument();
     document.request.body.schema.properties.optionalNote = field("string", "可选备注", "示例备注");

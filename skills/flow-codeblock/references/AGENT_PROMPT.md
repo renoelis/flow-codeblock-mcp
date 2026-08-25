@@ -56,6 +56,7 @@
 - 查询参数、请求头和请求体字段只有实际存在时才填写，并必须有名称、类型、描述和具体值；参数保留 `required` 表示运行时是否必填。
 - 需要描述 POST 请求体时填写 `content_type/schema/example`；每个响应必填 `status/description/content_type/schema/example`。
 - 响应 Schema 中每个字段必须填写 `type/description/example`；字段名称由 `properties` 的键表达。
+- `schema.properties` 只能放字段名到字段 Schema 的映射；`schema.required` 必须与 `properties` 同级，不能把 `required: []` 放进 `properties`。
 - 请求体或响应体的根 Schema 节点必须填写 `type`；其所有嵌套 Schema 节点（包括 `properties` 字段、数组的 `items`、`additionalProperties` 值 Schema）都必须填写 `type/description/example`。
 - 代码或 `example` 中键名已知的对象必须用 `properties` 逐项描述；`additionalProperties` 只用于键名运行时才确定且所有值结构相同的动态字典，并描述单个动态值的完整 Schema。不得用 `additionalProperties: {"type":"object","example":{}}` 表示“允许任意 JSON 值”，也不得在校验报错后继续嵌套同样的空对象 Schema。
 - 每个数组必须有 `items`，且 `items` 本身也必须填写 `type/description/example`；`items.type=object` 时还必须有完整 `items.properties`，数组值中的每个对象必须覆盖全部字段。
@@ -69,7 +70,7 @@
 
 调用预览前必须按上述规则递归自检一次请求和所有响应；不要依靠重复调用预览工具逐项发现缺失字段。
 
-`responses/logic_description` 必须放在 `interface_doc` 根对象内，不能放在 `flow_preview_script_change` 的工具参数层；请求体和每个响应的完整 `example` 与 `schema` 同级，`request.example` 应写成 `request.body.example`，`properties/required/items/additionalProperties` 放在 `schema` 内。MCP 会在预览前兼容纠正这些无歧义的位置错误，从父级示例或同名蛇形/驼峰别名补全可推导的节点示例，并移除 `usage_refs` 中无效的非对象条目；预览成功时通过 `interface_doc_normalizations` 返回修正记录，仍有错误时在错误文本的“本次已自动规范化”中返回。保留原文档和所有未报错字段，只修正错误列表中的准确路径；不要重写整份文档，也不要删除已有的 `responses`、`logic_description` 或 `request`。
+`interface_doc` 根对象只放 `schema_version/title/summary/endpoint/request/responses/logic_description/usage_refs`；`request` 只放 `query/headers/body`；`ip_whitelist` 是 `flow_preview_script_change` 的工具参数，不放进 `interface_doc`。`responses/logic_description` 必须放在 `interface_doc` 根对象内；请求体和每个响应的完整 `example` 与 `schema` 同级，`request.example` 应写成 `request.body.example`，`properties/required/items/additionalProperties` 放在 `schema` 内。MCP 会在预览前兼容纠正这些无歧义的位置错误，从父级示例或同名蛇形/驼峰别名补全可推导的节点示例，并移除 `usage_refs` 中无效的非对象条目；预览成功时通过 `interface_doc_normalizations` 返回修正记录，仍有错误时在错误文本的“本次已自动规范化”中返回。保留原文档和所有未报错字段，只修正错误列表中的准确路径；不要重写整份文档，也不要删除已有的 `responses`、`logic_description` 或 `request`。
 
 ## 原生能力和模块
 
