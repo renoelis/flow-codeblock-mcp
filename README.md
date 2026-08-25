@@ -7,7 +7,7 @@ Flow Codeblock 的本地 stdio MCP Server 与 Codex Skill。MCP 只调用 Flow C
 需要 Bun 1.4.0 或更高版本：
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.2.30
+bunx --bun flow-codeblock-mcp@0.2.31
 ```
 
 必须配置：
@@ -26,7 +26,7 @@ FLOW_CODEBLOCK_TOKEN=flow_xxx
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.2.30"],
+      "args": ["--bun", "flow-codeblock-mcp@0.2.31"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "https://qingcode.oalite.com",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>"
@@ -41,6 +41,7 @@ npm 包包含 MCP 运行源码、`flow-codeblock` Skill、`AGENT_PROMPT.md`、�
 ## 使用约束
 
 - 写代码前调用 `flow_write_code`；非脚本模式从 `input.<字段>` 读取，脚本模式从 `input.query/header/body/cookies` 读取。
+- 最终用户交付按模式区分：`non_script` 输出 JavaScript、接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和完整 `execution_url`；`script` 不主动回显 JavaScript 或原始 `interface_doc`，只输出接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和发布后的完整 `script_url`。脚本代码与 `interface_doc` 仍由模型内部提交给预览/发布工具，除非用户明确索要源码或原始文档。
 - 查询当前脚本时调用 `flow_get_script`，只传 `script_id`；MCP 会固定向 API 附加 `version=0` 标识当前版本，并将详情中的 `code_base64` 解码为 UTF-8 `code` 返回给大模型。只有明确查询具体历史版本时才调用 `flow_get_script_version`，该工具同样会解码代码；无法严格解码时保留原始 `code_base64`。接口文档当前与历史版本分别使用 `flow_get_script_documentation` 和 `flow_get_script_documentation_version`。
 - 所有工具 JSON 出参中的 `token`、`access_token`、`authorization`、`refresh_token`、`qingcodeToken` 等凭据字段都会自动脱敏；统计字段如 `token_cache`、`unique_tokens` 不会被误处理。
 - `flow_preview_script_change` 会向模型暴露结构化的 `interface_doc` 和 RFC 6902 `interface_doc_patch` 工具 Schema。创建或代码更新可提交完整文档；已有文档只改字段时可按当前文档路径提交补丁，避免重复传输未修改内容。预览前还会纠正可无歧义识别的 `responses/logic_description` 深层错位、误放的完整请求示例、`schema.properties.required`、脚本 `description` 和 `ip_whitelist`，将说明字段中误写的 `input.query/header/body/cookies` 转换为调用方 HTTP 术语，并通过 `interface_doc_normalizations` 返回修正记录；更新时与当前值相同的 `ip_whitelist` 会从变更载荷中省略，并通过 `ignored_changes` 说明，避免只改接口文档时误报白名单变更；固定字段对象使用 `properties`，键名未知且值同构的字典使用对象形式 `additionalProperties`，仅脚本原样透传且结构确实未知的上游 JSON 对象使用 `additionalProperties: true`。

@@ -47,7 +47,7 @@
 
 ## 脚本接口文档
 
-脚本模式必须把接口契约作为独立 JSON 对象输出，并通过 `interface_doc` 提交。创建脚本时必须提交完整文档；更新已有脚本时可以提交 RFC 6902 `interface_doc_patch`，只包含本次变更的 JSON Pointer 操作。不得使用 JavaScript 注释承载方法、路径、参数、响应、认证或接口说明。JSON 必须符合 `script-interface-doc.v1`；这些必填规则与 Flow Codeblock 页面、Rust 文档接口一致，示例不是可选提示字段。MCP 预览还会执行下列完整性门禁：
+脚本模式必须在内部把接口契约生成为独立 JSON 对象，并通过 `interface_doc` 提交。创建脚本时必须提交完整文档；更新已有脚本时可以提交 RFC 6902 `interface_doc_patch`，只包含本次变更的 JSON Pointer 操作。除非用户明确索要源码或原始文档，最终面向用户的交付不回显 JavaScript 代码或提交用的 `interface_doc` JSON，而是根据文档整理接口调用说明、参数示例、执行逻辑、成功/错误输出示例和最终 URL。不得使用 JavaScript 注释承载方法、路径、参数、响应、认证或接口说明。JSON 必须符合 `script-interface-doc.v1`；这些必填规则与 Flow Codeblock 页面、Rust 文档接口一致，示例不是可选提示字段。MCP 预览还会执行下列完整性门禁：
 
 - 文档必填 `schema_version/title/summary/endpoint/responses/logic_description`；无实际参数时 `request` 可省略，`usage_refs` 可省略。
 - `title` 是文档标题，`summary` 是一句话摘要，`logic_description` 必须说明输入、校验、处理步骤、外部调用、成功响应和错误分支。
@@ -99,12 +99,11 @@
 
 ## 回复和交付前检查
 
-除非用户明确要求只返回代码：
+除非用户明确要求只返回代码，最终用户交付按模式区分：
 
 1. 先说明模式及输出方式。
-2. 输出完整、可直接执行的 `javascript` 代码块。
-3. 脚本模式紧接着输出独立的 `script-interface-doc.v1` JSON 代码块；非脚本模式说明 `POST /flow/codeblock` 的调用字段和地址。
-4. 简述参数、行为、响应和错误处理。
-5. 检查输入来源、`return`/`qf_output` 二选一、异步生命周期、原生能力优先、禁止能力、可序列化结果和敏感信息。
+2. 非脚本模式输出完整、可直接执行的 `javascript` 代码块，并补充接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和完整 `execution_url`。
+3. 脚本模式不主动输出 JavaScript 代码或原始 `script-interface-doc.v1` JSON；补充接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和发布后的完整 `script_url`。脚本代码与 `interface_doc` 仍必须在内部提交给预览/发布工具。
+4. 检查输入来源、`return`/`qf_output` 二选一、异步生命周期、原生能力优先、禁止能力、可序列化结果和敏感信息。
 
 非脚本模式使用 `flow_write_code` 或 `flow_execute_code` 返回的完整 `execution_url`。脚本创建、更新和执行使用 `flow_apply_script_change` 或 `flow_execute_script` 返回的完整 `script_url`；其他脚本管理工具无需主动告知调用地址。

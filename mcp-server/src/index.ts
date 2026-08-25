@@ -390,6 +390,7 @@ const serverInstructions = [
   "Flow Codeblock MCP 可独立使用，不依赖 Skill。写代码前先调用 flow_write_code 获取对应模式的完整代码与输入契约。",
   "非脚本模式：代码读取全局 input.<字段>；只写代码时不要执行，用户要求测试时调用 flow_execute_code。",
   "脚本模式：代码读取 input.query/input.header/input.body/input.cookies；调用方 POST 时直接发送业务 JSON，不包装 input 或 input.body。创建时必须提交完整 interface_doc；更新代码时可提交完整 interface_doc 或 RFC 6902 interface_doc_patch。",
+  "最终用户交付按模式区分：non_script 输出 JavaScript、接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和完整 execution_url；script 不主动回显 JavaScript 或原始 interface_doc，只输出接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和发布后的完整 script_url，除非用户明确索要源码或原始文档。script 的代码与 interface_doc 仍必须内部提交给预览/发布工具。",
   "用户代码中的 process 为 undefined，禁止读取 process.env 或假设服务器预置业务环境变量。第三方 API 密钥由外部调用方通过 input 对应的请求体、查询参数或业务请求头传入，并在接口文档中声明；FLOW_CODEBLOCK_TOKEN 仅供 MCP 平台认证。",
   "读取当前脚本使用 flow_get_script 且只传 script_id，MCP 会固定以 version=0 标识当前版本；只有用户明确要求具体历史版本时才使用 flow_get_script_version。不得猜测 version，接口文档版本也不得猜测。",
   "flow_get_script 和 flow_get_script_version 会把脚本详情中的 code_base64 解码为 UTF-8 code 返回；严格解码失败时保留原始 code_base64。",
@@ -403,7 +404,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.30" },
+  { name: "flow-codeblock", version: "0.2.31" },
   { instructions: serverInstructions },
 );
 
@@ -411,7 +412,7 @@ server.registerTool(
   "flow_write_code",
   {
     title: "获取 Flow JavaScript 编写契约",
-    description: "写任何 Flow Codeblock JavaScript 时首先调用。根据 mode 返回 AGENT_PROMPT.md 权威规则原文及后续工具流程，大模型必须完整遵守后再依据 requirement 生成代码；规则由文件运行时直接读取，不维护第二份摘要。本工具本身不生成、保存或执行代码。用户未指定模式时选 non_script；要求创建/更新持久脚本或 HTTP 重定向时选 script。non_script 从全局 input.<业务字段> 取值，并返回由 FLOW_CODEBLOCK_BASE_URL 生成的完整 execution_url；script 从 input.query/header/body/cookies 取值并独立输出完整 script-interface-doc.v1，更新已有文档时可按需生成 RFC 6902 interface_doc_patch。用户代码不得读取 process.env，第三方 API 密钥必须由外部调用方通过 input 传入。完整接口文档和 Patch JSON Schema 体积较大，仅确实需要时设置 include_full_schema=true，此时同样直接读取权威 Schema 文件。",
+    description: "写任何 Flow Codeblock JavaScript 时首先调用。根据 mode 返回 AGENT_PROMPT.md 权威规则原文及后续工具流程，大模型必须完整遵守后再依据 requirement 生成代码；规则由文件运行时直接读取，不维护第二份摘要。本工具本身不生成、保存或执行代码。用户未指定模式时选 non_script；要求创建/更新持久脚本或 HTTP 重定向时选 script。non_script 从全局 input.<业务字段> 取值，并返回由 FLOW_CODEBLOCK_BASE_URL 生成的完整 execution_url；script 从 input.query/header/body/cookies 取值，内部生成并提交完整 script-interface-doc.v1，最终用户交付只展示接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和 script_url，除非用户明确索要源码或原始文档。更新已有文档时可按需生成 RFC 6902 interface_doc_patch。用户代码不得读取 process.env，第三方 API 密钥必须由外部调用方通过 input 传入。完整接口文档和 Patch JSON Schema 体积较大，仅确实需要时设置 include_full_schema=true，此时同样直接读取权威 Schema 文件。",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       mode: z.enum(["non_script", "script"]).describe(

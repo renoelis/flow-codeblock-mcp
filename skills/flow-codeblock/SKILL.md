@@ -30,7 +30,7 @@ MCP 所有工具的 JSON 出参都会递归脱敏 `token`、`access_token`、`au
 
 ### `script`
 
-生成两个独立代码块：可执行 JavaScript，以及可直接作为 `interface_doc` 提交的 `script-interface-doc.v1` JSON。
+内部生成可执行 JavaScript 和可直接作为 `interface_doc` 提交的 `script-interface-doc.v1` JSON，用于预览和发布；除非用户明确索要源码或原始文档，最终回复不主动回显这两个代码块。
 
 代码运行时内部输入为 `{ query, header, body, cookies }`，按需读取对应位置；调用方发送普通 HTTP 请求，POST 业务 JSON 直接放在请求体中，不包装成 `input` 或 `input.body`。接口文档只使用查询参数、请求头、请求体和 Cookie 等调用方概念。
 
@@ -46,6 +46,11 @@ MCP 所有工具的 JSON 出参都会递归脱敏 `token`、`access_token`、`au
 创建时 `description` 是脚本列表展示名称。用户未指定名称时，根据需求概括为不超过 15 个字符；用户明确给出较长名称时保留原意，不要擅自截断。
 
 创建和代码更新必须提交完整 `interface_doc` 或 `interface_doc_patch`；只改描述或 IP 白名单可以不提交。更新时只提交用户本次要求修改的字段，只改接口文档时不得携带 `ip_whitelist`。代码或文档 canonical JSON 变化生成新版本，只改描述/IP 不生成新版本；`ip_whitelist: null` 表示清除，省略表示保持。补丁操作按当前 canonical 文档的 JSON Pointer 顺序应用，最多 256 项，不能与完整 `interface_doc` 同时提交。预览返回 `ignored_changes` 表示对应字段已从发布载荷移除、不会被修改，无需因此重新生成或预览。
+
+### 最终用户交付
+
+- `non_script`：JavaScript 代码、接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和完整 `execution_url`。
+- `script`：接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和发布后的完整 `script_url`；代码与原始 `interface_doc` 只作为内部工具输入，除非用户明确要求，否则不在最终回复中回显。
 
 补丁错误只修正返回的操作序号和 JSON Pointer 路径；`test` 失败是补丁前置条件冲突，应重新读取当前文档和版本后重建补丁。不要把敏感 value 放入错误说明，也不要为了修复一个路径重写完整接口文档。
 

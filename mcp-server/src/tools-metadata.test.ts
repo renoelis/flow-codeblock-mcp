@@ -59,6 +59,8 @@ describe("MCP tool metadata", () => {
     expect(instructions).toContain("漏传时 MCP 根据 script_id 是否存在推断 create/update");
     expect(instructions).toContain("不得仅因发生兼容纠正就重写文档或再次预览");
     expect(instructions).toContain("禁止读取 process.env");
+    expect(instructions).toContain("最终用户交付按模式区分");
+    expect(instructions).toContain("script 不主动回显 JavaScript 或原始 interface_doc");
     expect(tools.map((tool) => tool.name).sort()).toEqual(expectedToolNames);
     expect(tools.some((tool) => tool.name.includes("delete"))).toBe(false);
   });
@@ -130,6 +132,7 @@ describe("MCP tool metadata", () => {
     expect(byName.get("flow_write_code")?.description).toContain("AGENT_PROMPT.md 权威规则原文");
     expect(byName.get("flow_write_code")?.description).toContain("non_script 从全局 input.<业务字段>");
     expect(byName.get("flow_write_code")?.description).toContain("script 从 input.query/header/body/cookies");
+    expect(byName.get("flow_write_code")?.description).toContain("最终用户交付只展示接口调用说明");
     expect(byName.get("flow_execute_script")?.description).toContain("不要包装为 {input:...} 或 {body:...}");
     expect(byName.get("flow_execute_script")?.description).toContain("完整 script_url");
     expect(byName.get("flow_execute_code")?.description).toContain("input 参数在此模式会原样成为全局 input");
