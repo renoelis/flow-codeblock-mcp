@@ -94,6 +94,7 @@ Token 级限流响应使用 `TokenRateLimitError`，`error.details.retryAfter` �
 | ScriptQuotaExceededError | 脚本数量配额超限 | 429 |
 | ScriptLockedError | 脚本已锁定，禁止编辑、回滚与删除 | 423 |
 | ScriptOwnerError | 非脚本所有者执行锁定、解锁、释放或转移 | 403 |
+| ScriptOwnershipClaimedError | 脚本仍有所有者，尚未释放所有权，禁止删除 | 409 |
 | ScriptOwnershipNotClaimedError | 脚本当前没有可释放或管理的所有者 | 409 |
 | ScriptOwnershipTransferNotReadyError | 所有权转移无效、过期或缺少前序验证 | 409 |
 | VersionNotFoundError | 脚本版本不存在 | 404 |
@@ -464,6 +465,7 @@ Token 掩码规则（`GET /flow/tokens`）：仅提供 `ws_id` 或仅提供 `ema
 - 成功状态：`200 OK`
 - 响应：`data={script_id}`
 - 脚本锁定时返回 `423 ScriptLockedError`
+- 仅 `is_locked=false` 且所有者已释放（`owner_email=null`）时允许删除；脚本已解锁但仍有所有者时返回 `409 ScriptOwnershipClaimedError`。
 
 #### POST /flow/scripts/{scriptId}/owner-challenge
 - 认证：Token
@@ -514,8 +516,10 @@ Token 掩码规则（`GET /flow/tokens`）：仅提供 `ws_id` 或仅提供 `ema
 
 #### POST /flow/admin/scripts/{scriptId}/ownership-recovery
 - 认证：管理员
-- 请求体：`{action:"unlock"|"assign_owner", owner_email?, owner_name?, reason}`
-- `reason` 必填，最长 500 字符；`assign_owner` 必须提供 `owner_email` 与 `owner_name`，并会保持脚本锁定。恢复动作仅用于应急恢复，会追加审计记录；管理员 Token 不会绕过普通脚本编辑或删除锁定。
+- 请求体：`{action:"unlock"|"release_owner"|"assign_owner", owner_email?, owner_name?, reason}`
+- `reason` 必填，最长 500 字符；`assign_owner` 必须提供 `owner_email` 与 `owner_name`，并会保持脚本锁定。
+- `release_owner` 用于管理员明确释放已有所有权：原子解除锁定、清空所有者邮箱和姓名、取消待确认的所有权转移并追加审计记录。未认领脚本返回 `409 ScriptOwnershipNotClaimedError`。
+- 恢复动作仅用于应急恢复；单独执行 `unlock` 只解除锁定并保留所有者，不能使脚本满足删除条件。管理员 Token 不会绕过普通脚本的锁定或所有权删除门禁。
 
 #### GET /flow/scripts/stats
 - 认证：管理员

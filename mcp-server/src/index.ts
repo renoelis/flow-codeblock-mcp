@@ -356,12 +356,12 @@ const serverInstructions = [
   "任何脚本变更都先调用 flow_preview_script_change；operation 建议显式传入，漏传时 MCP 根据 script_id 是否存在推断 create/update 并返回 input_normalizations。只有工具成功返回 preview_id 才能声称预览通过；此时所有 input/interface_doc normalizations 已写入该预览，requires_repreview=false，不得仅因发生兼容纠正就重写文档或再次预览。isError=true、-32602 或没有 preview_id 才表示失败，必须只修正错误指出的路径；只有向用户展示成功预览且获得明确确认后，才调用 flow_apply_script_change。不得把用户要求预览或修改视为发布确认。",
   "脚本发布成功后直接使用 flow_apply_script_change 返回的 data.script_url；该地址由 MCP 使用 FLOW_CODEBLOCK_BASE_URL 和脚本 ID 生成，不要询问用户公网域名。",
   "更新时只提交用户本次要求修改的字段；只改接口文档时省略 ip_whitelist。预览返回 ignored_changes 表示对应字段已从发布载荷移除，不会修改该字段，也无需因此重新预览。",
-  "MCP 不提供删除工具。遇到删除请求必须拒绝调用其他工具替代删除，并告知用户通过 Flow Codeblock 网页或 REST DELETE /flow/scripts/{scriptId} 自行删除。",
+  "MCP 不提供删除工具。遇到删除请求必须拒绝调用其他工具替代删除，并告知用户通过 Flow Codeblock 网页或 REST DELETE /flow/scripts/{scriptId} 自行删除；删除前脚本必须已解锁且已释放所有权，仅解锁不能删除。",
   "读取当前版本后再更新；版本冲突、404、锁定、限流、配额或校验失败时根据错误处理，不要用反复试调用探测参数。",
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.28" },
+  { name: "flow-codeblock", version: "0.2.29" },
   { instructions: serverInstructions },
 );
 

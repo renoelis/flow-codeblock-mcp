@@ -7,7 +7,7 @@ Flow Codeblock 的本地 stdio MCP Server 与 Codex Skill。MCP 只调用 Flow C
 需要 Bun 1.4.0 或更高版本：
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.2.28
+bunx --bun flow-codeblock-mcp@0.2.29
 ```
 
 必须配置：
@@ -26,7 +26,7 @@ FLOW_CODEBLOCK_TOKEN=flow_xxx
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.2.28"],
+      "args": ["--bun", "flow-codeblock-mcp@0.2.29"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "https://qingcode.oalite.com",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>"
@@ -51,5 +51,5 @@ npm 包包含 MCP 运行源码、`flow-codeblock` Skill、`AGENT_PROMPT.md`、�
 - 用户代码不能读取 `process.env` 或服务器业务环境变量。百度 AK 等第三方密钥必须由外部调用方通过业务请求体、查询参数或业务请求头传入，并在接口文档中声明；`FLOW_CODEBLOCK_TOKEN` 仅供 MCP 平台认证。
 - 释放所有权时，先用 `flow_request_script_owner_challenge(action=release)` 申请当前所有者验证码，再调用 `flow_release_script_ownership`；脚本必须先解锁，释放后其他 Token 使用者可以重新认领。
 - 脚本 POST 调用方直接提交业务 JSON，不包装为 `input` 或 `input.body`。
-- MCP 不提供删除脚本工具；删除需要用户通过网页或 REST API 自行操作。
+- MCP 不提供删除脚本工具；删除需要用户通过网页或 REST API 自行操作，并且脚本必须已解锁且已释放所有权。仅解锁不会清除所有者，也不能删除。
 - 执行操作正常进行认证、限流、配额扣减、安全校验、统计和审计。

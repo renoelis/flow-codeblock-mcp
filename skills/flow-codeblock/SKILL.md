@@ -77,6 +77,7 @@ MCP 预览与 Flow Codeblock 页面、Rust 文档接口使用同一套必填契�
 - 锁定/解锁：先调用 `flow_request_script_owner_challenge`，再用邮件验证码调用 `flow_lock_script` 或 `flow_unlock_script`。
 - 释放：脚本解锁后，先调用 `flow_request_script_owner_challenge` 并传 `action=release`，再用同一邮箱收到的验证码调用 `flow_release_script_ownership`。成功后所有者信息清空、待确认转移作废，其他 Token 使用者可以重新认领。
 - 转移：调用 `flow_start_ownership_transfer` 后，由新所有者用验证码调用 `flow_confirm_ownership_transfer`。
+- 删除：MCP 不提供删除工具。网页或 REST API 仅允许删除已解锁且已释放所有权的脚本；解锁会保留所有者，不能直接删除。
 - 验证码错误、过期、冷却或所有者不匹配时停止并报告服务端错误。
 
 ## 代码规则

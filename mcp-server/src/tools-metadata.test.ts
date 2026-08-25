@@ -52,6 +52,7 @@ describe("MCP tool metadata", () => {
     expect(instructions).toContain("不依赖 Skill");
     expect(instructions).toContain("先调用 flow_preview_script_change");
     expect(instructions).toContain("MCP 不提供删除工具");
+    expect(instructions).toContain("仅解锁不能删除");
     expect(instructions).toContain("不得猜测 version");
     expect(instructions).toContain("flow_release_script_ownership");
     expect(instructions).toContain("只有工具成功返回 preview_id");
