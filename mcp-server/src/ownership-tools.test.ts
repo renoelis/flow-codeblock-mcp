@@ -34,6 +34,7 @@ const transport = new StdioClientTransport({
   env: {
     FLOW_CODEBLOCK_BASE_URL: apiServer.url.origin,
     FLOW_CODEBLOCK_TOKEN: "flow_ownership_test",
+    FLOW_CODEBLOCK_OWNER_EMAIL: "owner@example.com",
   },
   stderr: "pipe",
 });
@@ -54,14 +55,12 @@ describe("script ownership release tools", () => {
       arguments: {
         script_id: "script release",
         action: "release",
-        email: "owner@example.com",
       },
     });
     await client.callTool({
       name: "flow_release_script_ownership",
       arguments: {
         script_id: "script release",
-        email: "owner@example.com",
         code: "123456",
       },
     });
@@ -80,5 +79,23 @@ describe("script ownership release tools", () => {
         path: "/flow/scripts/script%20release/release-ownership",
       },
     ]);
+  });
+
+  test("prefers an explicitly supplied email over the configured default", async () => {
+    await client.callTool({
+      name: "flow_unlock_script",
+      arguments: {
+        script_id: "script explicit",
+        email: "explicit@example.com",
+        code: "654321",
+      },
+    });
+
+    expect(apiRequests.at(-1)).toEqual({
+      accessToken: "flow_ownership_test",
+      body: { email: "explicit@example.com", code: "654321" },
+      method: "POST",
+      path: "/flow/scripts/script%20explicit/unlock",
+    });
   });
 });

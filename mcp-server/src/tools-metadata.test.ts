@@ -59,6 +59,7 @@ describe("MCP tool metadata", () => {
     expect(instructions).toContain("漏传时 MCP 根据 script_id 是否存在推断 create/update");
     expect(instructions).toContain("不得仅因发生兼容纠正就重写文档或再次预览");
     expect(instructions).toContain("禁止读取 process.env");
+    expect(instructions).toContain("FLOW_CODEBLOCK_OWNER_EMAIL");
     expect(instructions).toContain("最终用户交付按模式区分");
     expect(instructions).toContain("script 不主动回显 JavaScript 或原始 interface_doc");
     expect(tools.map((tool) => tool.name).sort()).toEqual(expectedToolNames);
@@ -110,6 +111,24 @@ describe("MCP tool metadata", () => {
       expect(pattern.test(".owner@example.com"), `${toolName}.${argumentName} leading dot`).toBe(false);
       expect(pattern.test("owner..name@example.com"), `${toolName}.${argumentName} repeated dot`).toBe(false);
     }
+
+    for (const [toolName, argumentName] of [
+      ["flow_request_script_owner_challenge", "email"],
+      ["flow_lock_script", "email"],
+      ["flow_unlock_script", "email"],
+      ["flow_release_script_ownership", "email"],
+      ["flow_start_ownership_transfer", "authorizer_email"],
+    ] as const) {
+      const tool = byName.get(toolName);
+      expect(tool?.inputSchema.required ?? [], `${toolName}.${argumentName} required`).not.toContain(argumentName);
+      expect(
+        (tool?.inputSchema.properties?.[argumentName] as { description?: string } | undefined)?.description,
+        `${toolName}.${argumentName} description`,
+      ).toContain("FLOW_CODEBLOCK_OWNER_EMAIL");
+    }
+
+    expect(byName.get("flow_confirm_ownership_transfer")?.inputSchema.required ?? [])
+      .toContain("email");
   });
 
   test("avoids propertyNames in the structured interface document schema", () => {

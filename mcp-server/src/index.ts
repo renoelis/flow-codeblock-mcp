@@ -14,14 +14,24 @@ import { assertScriptChangeInput } from "./script-change";
 
 const configuredBaseUrl = process.env.FLOW_CODEBLOCK_BASE_URL?.trim();
 const accessToken = process.env.FLOW_CODEBLOCK_TOKEN?.trim();
+const configuredOwnerEmail = process.env.FLOW_CODEBLOCK_OWNER_EMAIL?.trim();
 const previewTtlMs = 10 * 60 * 1000;
 const requestTimeoutMs = 30_000;
 const openAiCompatibleEmailPattern =
   /^[A-Za-z0-9_'+-]+(?:\.[A-Za-z0-9_'+-]+)*@(?:[A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
 
-function emailInput(description: string) {
+function emailInput(description: string, optional = false) {
   // Zod's default email regex uses lookahead, which OpenAI Responses tool schemas reject.
-  return z.email({ pattern: openAiCompatibleEmailPattern }).describe(description);
+  const schema = z.email({ pattern: openAiCompatibleEmailPattern });
+  return optional ? schema.optional().describe(description) : schema.describe(description);
+}
+
+function resolveOwnerEmail(email: string | undefined): string {
+  const resolved = email ?? configuredOwnerEmail;
+  if (!resolved) {
+    throw new Error("email is required; provide it in the tool arguments or configure FLOW_CODEBLOCK_OWNER_EMAIL");
+  }
+  return resolved;
 }
 
 if (!configuredBaseUrl) {
@@ -41,6 +51,10 @@ try {
 
 if (!accessToken) {
   throw new Error("FLOW_CODEBLOCK_TOKEN is required");
+}
+
+if (configuredOwnerEmail && !openAiCompatibleEmailPattern.test(configuredOwnerEmail)) {
+  throw new Error("FLOW_CODEBLOCK_OWNER_EMAIL must be a valid email address");
 }
 
 const previewStore = new Map<string, { expiresAt: number; fingerprint: string; operation: "create" | "update"; payload: Record<string, unknown> }>();
@@ -391,7 +405,7 @@ const serverInstructions = [
   "非脚本模式：代码读取全局 input.<字段>；只写代码时不要执行，用户要求测试时调用 flow_execute_code。",
   "脚本模式：代码读取 input.query/input.header/input.body/input.cookies；调用方 POST 时直接发送业务 JSON，不包装 input 或 input.body。创建时必须提交完整 interface_doc；更新代码时可提交完整 interface_doc 或 RFC 6902 interface_doc_patch。",
   "最终用户交付按模式区分：non_script 输出 JavaScript、接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和完整 execution_url；script 不主动回显 JavaScript 或原始 interface_doc，只输出接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和发布后的完整 script_url，除非用户明确索要源码或原始文档。script 的代码与 interface_doc 仍必须内部提交给预览/发布工具。",
-  "用户代码中的 process 为 undefined，禁止读取 process.env 或假设服务器预置业务环境变量。第三方 API 密钥由外部调用方通过 input 对应的请求体、查询参数或业务请求头传入，并在接口文档中声明；FLOW_CODEBLOCK_TOKEN 仅供 MCP 平台认证。",
+  "用户代码中的 process 为 undefined，禁止读取 process.env 或假设服务器预置业务环境变量。第三方 API 密钥由外部调用方通过 input 对应的请求体、查询参数或业务请求头传入，并在接口文档中声明；FLOW_CODEBLOCK_TOKEN 仅供 MCP 平台认证。若配置 FLOW_CODEBLOCK_OWNER_EMAIL，所有权认领、锁定、解锁、释放和转移授权工具在省略对应当前所有者 email 时会使用它；显式传入的 email 优先。",
   "读取当前脚本使用 flow_get_script 且只传 script_id，MCP 会固定以 version=0 标识当前版本；只有用户明确要求具体历史版本时才使用 flow_get_script_version。不得猜测 version，接口文档版本也不得猜测。",
   "flow_get_script 和 flow_get_script_version 会把脚本详情中的 code_base64 解码为 UTF-8 code 返回；严格解码失败时保留原始 code_base64。",
   "所有工具 JSON 出参会递归脱敏 token、access_token、authorization、refresh_token、qingcodeToken 等凭据字段；统计字段 token_cache、unique_tokens 不会被误处理。",
@@ -404,7 +418,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.31" },
+  { name: "flow-codeblock", version: "0.2.32" },
   { instructions: serverInstructions },
 );
 
@@ -577,14 +591,15 @@ server.registerTool(
       action: z.enum(["lock", "unlock", "release"]).describe(
         "验证码用途；必须与下一步 lock、unlock 或 release 工具完全一致。",
       ),
-      email: emailInput("接收验证码的所有者邮箱；下一步必须原样使用。"),
+      email: emailInput("接收验证码的所有者邮箱；下一步必须原样使用。省略时使用 FLOW_CODEBLOCK_OWNER_EMAIL。", true),
     },
   },
   async ({ script_id, action, email }) => {
     try {
+      const resolvedEmail = resolveOwnerEmail(email);
       return result(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}/owner-challenge`, {
         method: "POST",
-        body: JSON.stringify({ action, email }),
+        body: JSON.stringify({ action, email: resolvedEmail }),
       }));
     } catch (error) {
       return apiError(error);
@@ -600,16 +615,17 @@ server.registerTool(
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       script_id: z.string().min(1).describe("申请 lock 验证码时使用的同一脚本 ID。"),
-      email: emailInput("申请 lock 验证码时使用的同一邮箱。"),
+      email: emailInput("申请 lock 验证码时使用的同一邮箱。省略时使用 FLOW_CODEBLOCK_OWNER_EMAIL。", true),
       code: z.string().min(1).describe("邮箱收到的一次性 lock 验证码，不是 JavaScript 代码。"),
       owner_name: z.string().trim().min(1).max(100).describe("脚本所有者显示名称，去除首尾空白后 1-100 个字符。"),
     },
   },
   async ({ script_id, email, code, owner_name }) => {
     try {
+      const resolvedEmail = resolveOwnerEmail(email);
       return result(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}/lock`, {
         method: "POST",
-        body: JSON.stringify({ email, code, owner_name }),
+        body: JSON.stringify({ email: resolvedEmail, code, owner_name }),
       }));
     } catch (error) {
       return apiError(error);
@@ -625,15 +641,16 @@ server.registerTool(
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       script_id: z.string().min(1).describe("申请 unlock 验证码时使用的同一脚本 ID。"),
-      email: emailInput("申请 unlock 验证码时使用的同一所有者邮箱。"),
+      email: emailInput("申请 unlock 验证码时使用的同一所有者邮箱。省略时使用 FLOW_CODEBLOCK_OWNER_EMAIL。", true),
       code: z.string().min(1).describe("邮箱收到的一次性 unlock 验证码。"),
     },
   },
   async ({ script_id, email, code }) => {
     try {
+      const resolvedEmail = resolveOwnerEmail(email);
       return result(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}/unlock`, {
         method: "POST",
-        body: JSON.stringify({ email, code }),
+        body: JSON.stringify({ email: resolvedEmail, code }),
       }));
     } catch (error) {
       return apiError(error);
@@ -649,15 +666,16 @@ server.registerTool(
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       script_id: z.string().min(1).describe("申请 release 验证码时使用的同一已解锁脚本 ID。"),
-      email: emailInput("申请 release 验证码时使用的同一当前所有者邮箱。"),
+      email: emailInput("申请 release 验证码时使用的同一当前所有者邮箱。省略时使用 FLOW_CODEBLOCK_OWNER_EMAIL。", true),
       code: z.string().min(1).describe("当前所有者邮箱收到的一次性 release 验证码。"),
     },
   },
   async ({ script_id, email, code }) => {
     try {
+      const resolvedEmail = resolveOwnerEmail(email);
       return result(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}/release-ownership`, {
         method: "POST",
-        body: JSON.stringify({ email, code }),
+        body: JSON.stringify({ email: resolvedEmail, code }),
       }));
     } catch (error) {
       return apiError(error);
@@ -673,16 +691,17 @@ server.registerTool(
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     inputSchema: {
       script_id: z.string().min(1).describe("要转移所有权的脚本 ID。"),
-      authorizer_email: emailInput("当前所有者邮箱或创建该脚本的 Token 登记邮箱，仅用于授权校验。"),
+      authorizer_email: emailInput("当前所有者邮箱或创建该脚本的 Token 登记邮箱，仅用于授权校验。省略时使用 FLOW_CODEBLOCK_OWNER_EMAIL。", true),
       new_owner_email: emailInput("新所有者邮箱；验证码将发送到这里，确认步骤必须使用同一邮箱。"),
       new_owner_name: z.string().trim().min(1).max(100).describe("新所有者显示名称，去除首尾空白后 1-100 个字符。"),
     },
   },
   async ({ script_id, authorizer_email, new_owner_email, new_owner_name }) => {
     try {
+      const resolvedAuthorizerEmail = resolveOwnerEmail(authorizer_email);
       return result(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}/ownership-transfers`, {
         method: "POST",
-        body: JSON.stringify({ authorizer_email, new_owner_email, new_owner_name }),
+        body: JSON.stringify({ authorizer_email: resolvedAuthorizerEmail, new_owner_email, new_owner_name }),
       }));
     } catch (error) {
       return apiError(error);
