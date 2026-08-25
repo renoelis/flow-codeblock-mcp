@@ -5,7 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { codeWriterContext } from "./code-writer";
-import { interfaceDocInputDescription, normalizeInterfaceDocument } from "./interface-doc";
+import { interfaceDocToolInputSchema, normalizeInterfaceDocument } from "./interface-doc";
 import { assertScriptChangeInput } from "./script-change";
 
 const configuredBaseUrl = process.env.FLOW_CODEBLOCK_BASE_URL?.trim();
@@ -286,7 +286,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.19" },
+  { name: "flow-codeblock", version: "0.2.20" },
   { instructions: serverInstructions },
 );
 
@@ -614,7 +614,7 @@ const changeSchema = {
   ip_whitelist: z.array(z.string()).nullable().optional().describe(
     "允许调用脚本的 IP/CIDR 列表。省略=保持原值（创建时使用服务端默认）；null 或 []=清除限制；非空数组=设置白名单。单独修改不生成新版本。",
   ),
-  interface_doc: z.unknown().optional().describe(interfaceDocInputDescription),
+  interface_doc: interfaceDocToolInputSchema.optional(),
   responses: z.unknown().optional().describe(
     "仅用于兼容纠错：误放在工具参数层的接口响应会自动移入 interface_doc.responses；新调用必须直接写入 interface_doc。",
   ),
@@ -663,10 +663,22 @@ server.registerTool(
           "interface_doc.ip_whitelist 已忽略；工具参数 ip_whitelist 已存在",
         );
       }
+      if (
+        changeInput.description !== undefined &&
+        Object.prototype.hasOwnProperty.call(interfaceDocNormalization.recovered, "description")
+      ) {
+        delete interfaceDocNormalization.recovered.description;
+        interfaceDocNormalization.changes.push(
+          "interface_doc 中误放的 description 已忽略；工具参数 description 已存在",
+        );
+      }
       const preparedInput = changeInput.interface_doc === undefined
         ? changeInput
         : {
             ...changeInput,
+            ...(Object.prototype.hasOwnProperty.call(interfaceDocNormalization.recovered, "description")
+              ? { description: interfaceDocNormalization.recovered.description }
+              : {}),
             ...(Object.prototype.hasOwnProperty.call(interfaceDocNormalization.recovered, "ip_whitelist")
               ? { ip_whitelist: interfaceDocNormalization.recovered.ip_whitelist }
               : {}),

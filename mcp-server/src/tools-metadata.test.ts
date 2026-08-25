@@ -105,6 +105,21 @@ describe("MCP tool metadata", () => {
     }
   });
 
+  test("avoids propertyNames in the structured interface document schema", () => {
+    function visit(value: unknown, path: string): void {
+      if (Array.isArray(value)) {
+        value.forEach((item, index) => visit(item, `${path}[${index}]`));
+        return;
+      }
+      if (typeof value !== "object" || value === null) return;
+      expect(Object.prototype.hasOwnProperty.call(value, "propertyNames"), path).toBe(false);
+      for (const [key, child] of Object.entries(value)) visit(child, `${path}.${key}`);
+    }
+
+    const previewTool = tools.find((tool) => tool.name === "flow_preview_script_change");
+    visit(previewTool?.inputSchema.properties?.interface_doc, "flow_preview_script_change.interface_doc");
+  });
+
   test("distinguishes both code input models and locks the preview/apply workflow", () => {
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     expect(byName.get("flow_write_code")?.description).toContain("AGENT_PROMPT.md 权威规则原文");
@@ -139,8 +154,36 @@ describe("MCP tool metadata", () => {
     }
 
     const interfaceDoc = byName.get("flow_preview_script_change")?.inputSchema.properties?.interface_doc as
-      | { description?: string }
+      | {
+          description?: string;
+          type?: string;
+          properties?: Record<string, unknown>;
+        }
       | undefined;
+    expect(interfaceDoc?.type).toBe("object");
+    expect(interfaceDoc?.properties).toMatchObject({
+      schema_version: { const: "script-interface-doc.v1" },
+      endpoint: { type: "object" },
+      request: { type: "object" },
+      responses: { type: "array" },
+      logic_description: { type: "string" },
+    });
+    const requestSchema = interfaceDoc?.properties?.request as
+      | { properties?: Record<string, unknown> }
+      | undefined;
+    expect(requestSchema?.properties).toMatchObject({
+      query: { type: "array" },
+      headers: { type: "array" },
+      body: { type: "object" },
+    });
+    const bodySchema = requestSchema?.properties?.body as
+      | { properties?: Record<string, unknown> }
+      | undefined;
+    expect(bodySchema?.properties).toMatchObject({
+      content_type: { const: "application/json" },
+      schema: { type: "object" },
+      example: { description: expect.stringContaining("完整请求体示例") },
+    });
     expect(interfaceDoc?.description).toContain("logic_description");
     expect(interfaceDoc?.description).toContain("usage_refs 仅用于真实应用引用");
     expect(interfaceDoc?.description).toContain("request={query?,headers?,body?}");

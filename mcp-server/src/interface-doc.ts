@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 type JsonObject = Record<string, unknown>;
 
 export type InterfaceDocRecoveryFields = {
@@ -9,6 +11,7 @@ export type InterfaceDocNormalization = {
   document: unknown;
   changes: string[];
   recovered: {
+    description?: unknown;
     ip_whitelist?: unknown;
   };
 };
@@ -48,6 +51,66 @@ export const interfaceDocInputDescription = [
   ...interfaceDocRepairRules,
   ...interfaceDocNestedRules,
 ].join(" ");
+
+const looseSchemaNode = z.looseObject({
+  type: z.string().optional().describe("JSON Schema 类型，如 object、array、string、integer、number 或 boolean。"),
+  description: z.string().optional().describe("该节点表示的业务字段或数据结构说明。"),
+  example: z.unknown().optional().describe("与该节点 type 一致的具体示例值。"),
+  properties: z.object({}).catchall(z.unknown()).optional().describe(
+    "固定对象字段到子 Schema 的映射；字段名直接作为 properties 的键。",
+  ),
+  items: z.unknown().optional().describe("数组元素的完整子 Schema。"),
+  additionalProperties: z.unknown().optional().describe("仅用于动态键字典的值 Schema，或布尔值。"),
+  required: z.array(z.string()).optional().describe("运行时真正必填的 properties 字段名。"),
+});
+
+const parameterInputSchema = z.looseObject({
+  name: z.string().optional().describe("调用方使用的查询参数或请求头名称。"),
+  type: z.enum(["string", "integer", "number", "boolean", "array", "object"]).optional().describe(
+    "参数 JSON 类型。",
+  ),
+  required: z.boolean().optional().describe("该参数在运行时是否必填。"),
+  description: z.string().optional().describe("参数用途和约束说明。"),
+  example: z.unknown().optional().describe("参数的具体示例值。"),
+  default: z.unknown().optional().describe("可选默认值。"),
+  format: z.string().optional().describe("可选格式提示。"),
+  enum_values: z.array(z.unknown()).optional().describe("可选枚举值列表。"),
+});
+
+const bodyInputSchema = z.looseObject({
+  content_type: z.literal("application/json").optional().describe("固定为 application/json。"),
+  schema: looseSchemaNode.optional().describe("调用方 POST 请求体的 JSON Schema。"),
+  example: z.unknown().optional().describe("与 schema 同级且结构一致的完整请求体示例。"),
+});
+
+const responseInputSchema = z.looseObject({
+  status: z.number().int().min(100).max(599).optional().describe("HTTP 状态码，范围 100-599。"),
+  description: z.string().optional().describe("该响应分支的业务含义。"),
+  content_type: z.literal("application/json").optional().describe("固定为 application/json。"),
+  schema: looseSchemaNode.optional().describe("响应体 JSON Schema。"),
+  example: z.unknown().optional().describe("与 schema 同级且结构一致的完整响应示例。"),
+});
+
+export const interfaceDocToolInputSchema = z.looseObject({
+  schema_version: z.literal("script-interface-doc.v1").optional().describe("固定文档契约版本。"),
+  title: z.string().optional().describe("接口文档标题。"),
+  summary: z.string().optional().describe("面向调用方的一句话摘要。"),
+  endpoint: z.looseObject({
+    methods: z.array(z.enum(["GET", "POST"])).optional().describe("接口支持的请求方法。"),
+    path: z.string().optional().describe("更新时填写实际 /flow/codeblock/{script_id} 路径。"),
+    description: z.string().optional().describe("接口用途说明。"),
+  }).optional().describe("脚本 HTTP 端点契约。"),
+  request: z.looseObject({
+    query: z.array(parameterInputSchema).optional().describe("调用方 URL 查询参数。"),
+    headers: z.array(parameterInputSchema).optional().describe("调用方业务请求头。"),
+    body: bodyInputSchema.optional().describe("POST 请求体；example 必须与 schema 同级。"),
+  }).optional().describe("调用方请求契约；只能包含 query、headers 和 body。"),
+  responses: z.array(responseInputSchema).optional().describe("完整响应分支数组，属于 interface_doc 根对象。"),
+  logic_description: z.string().optional().describe("接口处理逻辑，属于 interface_doc 根对象且至少 20 个字符。"),
+  usage_refs: z.array(z.unknown()).optional().describe(
+    "真实应用引用对象数组，每项为 {app_name,app_id?,location?,note?}；普通说明不要放在这里。",
+  ),
+}).describe(interfaceDocInputDescription);
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -154,6 +217,57 @@ function normalizeSchemaNodeExamples(
   }
 }
 
+function exampleMatchesType(type: unknown, example: unknown): boolean {
+  switch (type) {
+    case "array": return Array.isArray(example);
+    case "object": return isObject(example);
+    case "string": return typeof example === "string";
+    case "integer": return typeof example === "number" && Number.isInteger(example);
+    case "number": return typeof example === "number";
+    case "boolean": return typeof example === "boolean";
+    case "null": return example === null;
+    default: return true;
+  }
+}
+
+function isRootObjectExample(schema: JsonObject, example: unknown, ignoredProperty?: string): boolean {
+  if (schema.type !== "object" || !isObject(schema.properties) || !isObject(example)) return false;
+  const propertyNames = new Set(Object.keys(schema.properties).filter((name) => name !== ignoredProperty));
+  const exampleNames = Object.keys(example);
+  return exampleNames.length > 0 && exampleNames.every((name) => propertyNames.has(name));
+}
+
+function recoverMisplacedContainerExample(container: JsonObject, path: string, changes: string[]): void {
+  if (hasOwn(container, "example") || !isObject(container.schema) || !isObject(container.schema.properties)) return;
+
+  const schema = container.schema;
+  const properties = schema.properties;
+  if (
+    hasOwn(properties, "example") &&
+    isRootObjectExample(schema, properties.example, "example")
+  ) {
+    container.example = structuredClone(properties.example);
+    delete properties.example;
+    changes.push(`${path}.example 已从 ${path}.schema.properties.example 提升`);
+    return;
+  }
+
+  for (const [name, propertySchema] of Object.entries(properties)) {
+    if (
+      !isObject(propertySchema) ||
+      !hasOwn(propertySchema, "example") ||
+      exampleMatchesType(propertySchema.type, propertySchema.example) ||
+      !isRootObjectExample(schema, propertySchema.example)
+    ) {
+      continue;
+    }
+    container.example = structuredClone(propertySchema.example);
+    delete propertySchema.example;
+    changes.push(`${path}.example 已从误放的 ${path}.schema.properties.${name}.example 提升`);
+    return;
+  }
+}
+
 function normalizeSchemaContainer(container: JsonObject, path: string, changes: string[]): void {
   if (!isObject(container.schema)) return;
 
@@ -169,6 +283,7 @@ function normalizeSchemaContainer(container: JsonObject, path: string, changes: 
     container.example = structuredClone(container.schema.example);
     changes.push(`${path}.example 已从 ${path}.schema.example 提升`);
   }
+  recoverMisplacedContainerExample(container, path, changes);
   normalizeSchemaNodeExamples(container.schema, container.example, `${path}.schema`, changes);
 }
 
@@ -204,19 +319,36 @@ function recoverInterfaceDocRootFields(
   }
 }
 
-function recoverRequestRootFields(document: JsonObject, changes: string[]): void {
-  if (!isObject(document.request)) return;
+function recoverDocumentRootFields(
+  document: JsonObject,
+  container: JsonObject,
+  path: string,
+  changes: string[],
+): void {
   for (const key of ["responses", "logic_description"] as const) {
-    if (!hasOwn(document.request, key)) continue;
+    if (!hasOwn(container, key)) continue;
     if (hasOwn(document, key)) {
-      delete document.request[key];
-      changes.push(`interface_doc.request.${key} 已移除；interface_doc.${key} 已存在`);
+      delete container[key];
+      changes.push(`${path}.${key} 已移除；interface_doc.${key} 已存在`);
       continue;
     }
-    document[key] = document.request[key];
-    delete document.request[key];
-    changes.push(`interface_doc.request.${key} 已移入 interface_doc.${key}`);
+    document[key] = container[key];
+    delete container[key];
+    changes.push(`${path}.${key} 已移入 interface_doc.${key}`);
   }
+}
+
+function recoverToolField(
+  container: JsonObject,
+  path: string,
+  key: "description" | "ip_whitelist",
+  recovered: InterfaceDocNormalization["recovered"],
+  changes: string[],
+): void {
+  if (!hasOwn(container, key)) return;
+  if (!hasOwn(recovered, key)) recovered[key] = container[key];
+  delete container[key];
+  changes.push(`${path}.${key} 已移回 flow_preview_script_change.${key}`);
 }
 
 export function normalizeInterfaceDocument(
@@ -228,12 +360,19 @@ export function normalizeInterfaceDocument(
   const normalized = structuredClone(document) as JsonObject;
   const changes: string[] = [];
   const recovered: InterfaceDocNormalization["recovered"] = {};
-  if (hasOwn(normalized, "ip_whitelist")) {
-    recovered.ip_whitelist = normalized.ip_whitelist;
-    delete normalized.ip_whitelist;
-    changes.push("interface_doc.ip_whitelist 已移回 flow_preview_script_change.ip_whitelist");
-  }
-  recoverRequestRootFields(normalized, changes);
+  recoverToolField(normalized, "interface_doc", "description", recovered, changes);
+  recoverToolField(normalized, "interface_doc", "ip_whitelist", recovered, changes);
+  const request = isObject(normalized.request) ? normalized.request : undefined;
+  const body = request && isObject(request.body) ? request.body : undefined;
+  const bodySchema = body && isObject(body.schema) ? body.schema : undefined;
+  if (request) recoverToolField(request, "interface_doc.request", "description", recovered, changes);
+  if (request) recoverToolField(request, "interface_doc.request", "ip_whitelist", recovered, changes);
+  if (body) recoverToolField(body, "interface_doc.request.body", "description", recovered, changes);
+  if (body) recoverToolField(body, "interface_doc.request.body", "ip_whitelist", recovered, changes);
+  if (bodySchema) recoverToolField(bodySchema, "interface_doc.request.body.schema", "ip_whitelist", recovered, changes);
+  if (request) recoverDocumentRootFields(normalized, request, "interface_doc.request", changes);
+  if (body) recoverDocumentRootFields(normalized, body, "interface_doc.request.body", changes);
+  if (bodySchema) recoverDocumentRootFields(normalized, bodySchema, "interface_doc.request.body.schema", changes);
   recoverInterfaceDocRootFields(normalized, recoveryFields, changes);
   normalizeUsageRefs(normalized, changes);
   if (isObject(normalized.request) && isObject(normalized.request.body)) {

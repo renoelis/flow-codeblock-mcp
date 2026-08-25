@@ -215,6 +215,51 @@ describe("script preview tool", () => {
     expect(normalized.ip_whitelist).toBeUndefined();
   });
 
+  test("recovers deeply nested document fields before preview validation", async () => {
+    const interfaceDoc = misplacedInterfaceDoc() as Record<string, unknown>;
+    const request = interfaceDoc.request as Record<string, unknown>;
+    const body = request.body as Record<string, unknown>;
+    const schema = body.schema as Record<string, unknown>;
+    const properties = body.properties as Record<string, unknown>;
+    schema.responses = interfaceDoc.responses;
+    schema.logic_description = interfaceDoc.logic_description;
+    properties.example = schema.example;
+    delete schema.example;
+    delete interfaceDoc.responses;
+    delete interfaceDoc.logic_description;
+    request.description = "名称校验脚本";
+    body.ip_whitelist = ["203.0.113.30"];
+
+    const response = await client.callTool({
+      name: "flow_preview_script_change",
+      arguments: {
+        operation: "create",
+        code: "return { success: true };",
+        interface_doc: interfaceDoc,
+      },
+    });
+
+    expect(response.isError).not.toBe(true);
+    const content = response.content.find((item) => item.type === "text");
+    if (!content || content.type !== "text") throw new Error("preview did not return text");
+    const preview = JSON.parse(content.text) as Record<string, unknown>;
+    expect(preview.changes).toMatchObject({ description: true, ip_whitelist: true, interface_doc: true });
+    expect(preview.interface_doc_normalizations).toEqual(expect.arrayContaining([
+      "interface_doc.request.description 已移回 flow_preview_script_change.description",
+      "interface_doc.request.body.ip_whitelist 已移回 flow_preview_script_change.ip_whitelist",
+      "interface_doc.request.body.schema.responses 已移入 interface_doc.responses",
+      "interface_doc.request.body.schema.logic_description 已移入 interface_doc.logic_description",
+      "interface_doc.request.body.example 已从 interface_doc.request.body.schema.properties.example 提升",
+    ]));
+    expect(validationRequest?.ip_whitelist).toEqual(["203.0.113.30"]);
+    const normalized = validationRequest?.interface_doc as Record<string, unknown>;
+    const normalizedRequest = normalized.request as Record<string, unknown>;
+    const normalizedBody = normalizedRequest.body as Record<string, unknown>;
+    expect(normalized.responses).toHaveLength(1);
+    expect(normalized.logic_description).toBeDefined();
+    expect(normalizedBody.example).toEqual({ name: "示例名称" });
+  });
+
   test("rejects misplaced document fields when interface_doc is absent", async () => {
     const response = await client.callTool({
       name: "flow_preview_script_change",

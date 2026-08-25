@@ -199,6 +199,60 @@ describe("interfaceDocCompletenessIssues", () => {
     expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
   });
 
+  test("recovers document fields and wrapper examples misplaced below request.body", () => {
+    const document = completePostDocument() as Record<string, unknown>;
+    const request = document.request as Record<string, unknown>;
+    const body = request.body as Record<string, unknown>;
+    const schema = body.schema as Record<string, unknown>;
+    const properties = schema.properties as Record<string, Record<string, unknown>>;
+    schema.responses = document.responses;
+    schema.logic_description = document.logic_description;
+    properties.queryText.example = body.example;
+    delete body.example;
+    delete document.responses;
+    delete document.logic_description;
+    request.description = "数据处理脚本";
+    body.ip_whitelist = ["203.0.113.20"];
+
+    const normalized = normalizeInterfaceDocument(document);
+    const normalizedDocument = normalized.document as Record<string, unknown>;
+    const normalizedRequest = normalizedDocument.request as Record<string, unknown>;
+    const normalizedBody = normalizedRequest.body as Record<string, unknown>;
+    expect(normalized.changes).toEqual(expect.arrayContaining([
+      "interface_doc.request.description 已移回 flow_preview_script_change.description",
+      "interface_doc.request.body.ip_whitelist 已移回 flow_preview_script_change.ip_whitelist",
+      "interface_doc.request.body.schema.responses 已移入 interface_doc.responses",
+      "interface_doc.request.body.schema.logic_description 已移入 interface_doc.logic_description",
+      "interface_doc.request.body.example 已从误放的 interface_doc.request.body.schema.properties.queryText.example 提升",
+    ]));
+    expect(normalized.recovered.description).toBe("数据处理脚本");
+    expect(normalized.recovered.ip_whitelist).toEqual(["203.0.113.20"]);
+    expect(normalizedBody.example).toEqual({ queryText: "待处理内容" });
+    expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
+  });
+
+  test("recovers body-level root fields and examples stored as a properties entry", () => {
+    const document = completePostDocument() as Record<string, unknown>;
+    const request = document.request as Record<string, unknown>;
+    const body = request.body as Record<string, unknown>;
+    const schema = body.schema as Record<string, unknown>;
+    const properties = schema.properties as Record<string, unknown>;
+    body.responses = document.responses;
+    body.logic_description = document.logic_description;
+    properties.example = body.example;
+    delete body.example;
+    delete document.responses;
+    delete document.logic_description;
+
+    const normalized = normalizeInterfaceDocument(document);
+    expect(normalized.changes).toEqual(expect.arrayContaining([
+      "interface_doc.request.body.responses 已移入 interface_doc.responses",
+      "interface_doc.request.body.logic_description 已移入 interface_doc.logic_description",
+      "interface_doc.request.body.example 已从 interface_doc.request.body.schema.properties.example 提升",
+    ]));
+    expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
+  });
+
   test("allows optional properties to be omitted from wrapper examples", () => {
     const document = completePostDocument();
     document.request.body.schema.properties.optionalNote = field("string", "可选备注", "示例备注");
