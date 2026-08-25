@@ -436,7 +436,7 @@ Token 掩码规则（`GET /flow/tokens`）：仅提供 `ws_id` 或仅提供 `ema
   - `code_base64`：必填
   - `description`：可选
   - `ip_whitelist`：可选字符串数组（空数组或 null 表示不限制）
-  - `interface_doc`：可选 `script-interface-doc.v1` 对象；代码和文档在同一事务中保存为版本 1
+  - `interface_doc`：可选 `script-interface-doc.v1` 对象；代码和文档在同一事务中保存为版本 1。创建不接受 `interface_doc_patch`
 - 成功状态：`200 OK`
 - 响应：`data={script_id, version}`
 
@@ -448,6 +448,7 @@ Token 掩码规则（`GET /flow/tokens`）：仅提供 `ws_id` 或仅提供 `ema
   - `description`
   - `ip_whitelist`（数组或 null；null 清除白名单，省略表示保持原值）
   - `interface_doc`（规范化前的 `script-interface-doc.v1` 对象）
+  - `interface_doc_patch`（仅已有脚本；RFC 6902 操作数组，与 `interface_doc` 互斥，必须同时提供 `expected_version`）
   - `rollback_to_version`
 - 限制：`code_base64` 与 `rollback_to_version` 不能同时提供
 - 相同代码：仅更新其他提供的元数据，不创建版本，响应中的 `code_changed=false`
@@ -457,7 +458,7 @@ Token 掩码规则（`GET /flow/tokens`）：仅提供 `ws_id` 或仅提供 `ema
 
 #### POST /flow/scripts/validate
 - 认证：Token；只做认证、限流和脚本/文档校验，不写数据库、不扣执行配额。
-- 请求体：`code_base64`（创建或代码变更时必填，更新仅描述/IP 时可省略）、`script_id`（更新或文档校验时提供）、`ip_whitelist`、`interface_doc`。
+- 请求体：`code_base64`（创建或代码变更时必填，更新仅描述/IP 时可省略）、`script_id`（更新或文档校验时提供）、`expected_version`（补丁校验时必填正整数）、`ip_whitelist`、`interface_doc` 或 `interface_doc_patch`（二选一）。
 - 响应：`data.valid`、`data.code_hash`、`data.code_length`、规范化后的 `data.interface_doc` 和 `data.warnings`。
 
 #### DELETE /flow/scripts/{scriptId}
@@ -661,6 +662,8 @@ curl -X POST http://localhost:3002/flow/scripts/validate \
   }'
 ```
 
+更新已有脚本时也可以在校验请求中提交 `script_id`、`expected_version` 和 `interface_doc_patch`。服务端会基于当前版本的接口文档应用 RFC 6902 JSON Patch，只返回校验结果，不写数据库；没有当前文档时必须改为提交完整 `interface_doc`。
+
 ### 执行脚本：`POST /flow/codeblock/{scriptId}`
 ```bash
 curl -X POST "http://localhost:3002/flow/codeblock/d9b2...?qingcodeToken=<TOKEN>" \
@@ -711,7 +714,9 @@ curl -X POST http://localhost:3002/flow/tokens \
 
 ### `PUT /flow/scripts/{script_id}/documentation`
 
-请求格式与 `POST` 相同，另可带 `expected_version` 正整数。服务端在数据库行锁内校验期望版本，冲突返回 `409 VersionConflictError`。代码或文档 canonical JSON 发生变化时生成新脚本版本；重复保存相同文档、只修改描述或 IP 白名单不会增加版本。锁定脚本、历史版本均不能写入；回滚会恢复代码、描述、IP 白名单和接口文档快照。
+请求格式与 `POST` 相同，另可带 `expected_version` 正整数。全量保存使用 `document` 或 `raw_document`；增量保存使用 `document_patch`，三者必须且只能提供一个。`document_patch` 是最多 256 项的 RFC 6902 JSON Patch 操作数组，补丁更新必须提供 `expected_version`，并按当前 canonical 文档的 JSON Pointer 路径顺序应用。服务端会在保存前重新规范化和完整校验文档；补丁路径错误或结果不完整返回 `400 ValidationError`，期望版本冲突返回 `409 VersionConflictError`。
+
+脚本更新 `PUT /flow/scripts/{script_id}` 也支持 `interface_doc_patch`，与 `interface_doc` 互斥，可以和代码变更同一次提交。创建脚本不能使用补丁；补丁和代码或文档 canonical JSON 发生变化时生成新脚本版本，重复补丁不会增加版本。锁定脚本、历史版本均不能写入；回滚会恢复代码、描述、IP 白名单和接口文档快照。
 
 示例：
 
@@ -719,4 +724,16 @@ curl -X POST http://localhost:3002/flow/tokens \
 curl -X PUT 'http://localhost:3002/flow/scripts/demo12345678901234567890/documentation' \
   -H 'Content-Type: application/json' -H 'accessToken: <TOKEN>' \
   -d '{"document":{"schema_version":"script-interface-doc.v1","title":"客户查询","summary":"根据客户编号查询客户信息","endpoint":{"methods":["GET"],"description":"校验客户编号并查询客户资料"},"request":{"query":[{"name":"customer_id","type":"string","required":true,"description":"客户编号","example":"C10001"}],"headers":[]},"responses":[{"status":200,"description":"查询成功","content_type":"application/json","schema":{"type":"object"},"example":{}}],"logic_description":"校验客户编号后查询客户资料，成功时返回客户信息；客户不存在或参数无效时返回明确错误响应。"}}'
+```
+
+只修改摘要或深层 Schema 字段时，可以只发送补丁，避免重复传输完整文档：
+
+```json
+{
+  "expected_version": 7,
+  "document_patch": [
+    {"op": "replace", "path": "/summary", "value": "根据客户编号查询客户资料"},
+    {"op": "replace", "path": "/responses/0/schema/properties/status/description", "value": "客户状态"}
+  ]
+}
 ```

@@ -36,7 +36,7 @@ MCP 所有工具的 JSON 出参都会递归脱敏 `token`、`access_token`、`au
 
 创建或更新代码的流程：
 
-1. 生成代码和完整接口文档；更新前先用 `flow_get_script` 读取当前版本，只传 `script_id`。
+1. 创建时生成完整接口文档；更新代码或文档时先用 `flow_get_script` 和 `flow_get_script_documentation` 读取当前版本，只传 `script_id`。若只修改已有文档字段，优先生成 RFC 6902 `interface_doc_patch`，不要重复重写未修改字段。
 2. 调用 `flow_preview_script_change`。建议显式传 `operation`；创建不带 `script_id`，更新带 `script_id` 和 `expected_version`。MCP 会兼容漏传 `operation`：没有 `script_id` 时推断为 `create`，有 `script_id` 时推断为 `update`，并通过 `input_normalizations` 说明。更新预览会先确认脚本存在且版本未变化；404 或版本冲突时停止并重新读取，不得继续发布。
 3. 展示预览结果。只有用户明确确认后，才调用 `flow_apply_script_change`，传 `preview_id` 和 `confirm: true`。
 4. 创建成功后调用 `flow_execute_script`，其 `body` 参数直接传业务 JSON，报告执行和配额结果。
@@ -45,7 +45,9 @@ MCP 所有工具的 JSON 出参都会递归脱敏 `token`、`access_token`、`au
 
 创建时 `description` 是脚本列表展示名称。用户未指定名称时，根据需求概括为不超过 15 个字符；用户明确给出较长名称时保留原意，不要擅自截断。
 
-创建和代码更新必须提交接口文档；只改描述或 IP 白名单可以不提交。更新时只提交用户本次要求修改的字段，只改接口文档时不得携带 `ip_whitelist`。代码或文档变化生成新版本，只改描述/IP 不生成新版本；`ip_whitelist: null` 表示清除，省略表示保持。预览返回 `ignored_changes` 表示对应字段已从发布载荷移除、不会被修改，无需因此重新生成或预览。
+创建和代码更新必须提交完整 `interface_doc` 或 `interface_doc_patch`；只改描述或 IP 白名单可以不提交。更新时只提交用户本次要求修改的字段，只改接口文档时不得携带 `ip_whitelist`。代码或文档 canonical JSON 变化生成新版本，只改描述/IP 不生成新版本；`ip_whitelist: null` 表示清除，省略表示保持。补丁操作按当前 canonical 文档的 JSON Pointer 顺序应用，最多 256 项，不能与完整 `interface_doc` 同时提交。预览返回 `ignored_changes` 表示对应字段已从发布载荷移除、不会被修改，无需因此重新生成或预览。
+
+补丁错误只修正返回的操作序号和 JSON Pointer 路径；`test` 失败是补丁前置条件冲突，应重新读取当前文档和版本后重建补丁。不要把敏感 value 放入错误说明，也不要为了修复一个路径重写完整接口文档。
 
 ## 接口文档
 
@@ -86,6 +88,7 @@ MCP 预览与 Flow Codeblock 页面、Rust 文档接口使用同一套必填契�
 
 - REST 字段或错误：[api.md](references/api.md)
 - 完整接口文档结构：[script-interface-doc.schema.json](references/script-interface-doc.schema.json)
+- 接口文档增量补丁：[script-interface-doc.patch.schema.json](references/script-interface-doc.patch.schema.json)
 - 使用 npm 模块：[modules.json](references/modules.json)
 - 安全规则排查：[dangerous_patterns.json](references/dangerous_patterns.json)
 

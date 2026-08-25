@@ -54,10 +54,18 @@ describe("codeWriterContext", () => {
     const fullContext = codeWriterContext("script", "创建脚本", true);
     const compactSchema = objectField(compactContext, "interface_document_schema");
     const fullSchema = objectField(fullContext, "interface_document_schema");
+    const compactPatchSchema = objectField(compactContext, "interface_document_patch_schema");
+    const fullPatchSchema = objectField(fullContext, "interface_document_patch_schema");
 
     expect(compactSchema.included).toBe(false);
     expect(compactSchema).not.toHaveProperty("value");
     expect(fullSchema.included).toBe(true);
     expect(fullSchema.value).toEqual(expectedSchema);
+    expect(compactPatchSchema.included).toBe(false);
+    expect(compactPatchSchema).not.toHaveProperty("value");
+    expect(fullPatchSchema.included).toBe(true);
+    expect(fullPatchSchema.value).toEqual(JSON.parse(
+      await Bun.file(new URL("script-interface-doc.patch.schema.json", referencesDirectory)).text(),
+    ));
   });
 });

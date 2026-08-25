@@ -96,6 +96,21 @@ const responseInputSchema = z.looseObject({
   example: z.unknown().optional().describe("与 schema 同级且结构一致的完整响应示例。"),
 });
 
+const patchPathSchema = z.string().describe("RFC 6901 JSON Pointer 路径；数组路径使用当前 canonical 文档的索引。");
+const interfaceDocPatchOperationSchema = z.union([
+  z.object({ op: z.literal("add"), path: patchPathSchema, value: z.unknown() }).strict(),
+  z.object({ op: z.literal("remove"), path: patchPathSchema }).strict(),
+  z.object({ op: z.literal("replace"), path: patchPathSchema, value: z.unknown() }).strict(),
+  z.object({ op: z.literal("move"), from: patchPathSchema, path: patchPathSchema }).strict(),
+  z.object({ op: z.literal("copy"), from: patchPathSchema, path: patchPathSchema }).strict(),
+  z.object({ op: z.literal("test"), path: patchPathSchema, value: z.unknown() }).strict(),
+]);
+
+export const interfaceDocPatchSchema = z.array(interfaceDocPatchOperationSchema)
+  .min(1)
+  .max(256)
+  .describe("RFC 6902 JSON Patch 操作数组；按顺序应用，不能与完整 interface_doc 同时提供。");
+
 export const interfaceDocToolInputSchema = z.looseObject({
   schema_version: z.literal("script-interface-doc.v1").optional().describe("固定文档契约版本。"),
   title: z.string().optional().describe("接口文档标题。"),
@@ -116,6 +131,13 @@ export const interfaceDocToolInputSchema = z.looseObject({
     "真实应用引用对象数组，每项为 {app_name,app_id?,location?,note?}；普通说明不要放在这里。",
   ),
 }).describe(interfaceDocInputDescription);
+
+export function assertInterfaceDocPatch(patch: unknown): void {
+  const parsed = interfaceDocPatchSchema.safeParse(patch);
+  if (!parsed.success) {
+    throw new Error(`interface_doc_patch 格式无效：${parsed.error.message}`);
+  }
+}
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);

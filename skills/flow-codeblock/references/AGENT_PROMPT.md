@@ -47,7 +47,7 @@
 
 ## 脚本接口文档
 
-脚本模式必须把接口契约作为独立 JSON 对象输出，并通过 `interface_doc` 提交。不得使用 JavaScript 注释承载方法、路径、参数、响应、认证或接口说明。JSON 必须符合 `script-interface-doc.v1`；这些必填规则与 Flow Codeblock 页面、Rust 文档接口一致，示例不是可选提示字段。MCP 预览还会执行下列完整性门禁：
+脚本模式必须把接口契约作为独立 JSON 对象输出，并通过 `interface_doc` 提交。创建脚本时必须提交完整文档；更新已有脚本时可以提交 RFC 6902 `interface_doc_patch`，只包含本次变更的 JSON Pointer 操作。不得使用 JavaScript 注释承载方法、路径、参数、响应、认证或接口说明。JSON 必须符合 `script-interface-doc.v1`；这些必填规则与 Flow Codeblock 页面、Rust 文档接口一致，示例不是可选提示字段。MCP 预览还会执行下列完整性门禁：
 
 - 文档必填 `schema_version/title/summary/endpoint/responses/logic_description`；无实际参数时 `request` 可省略，`usage_refs` 可省略。
 - `title` 是文档标题，`summary` 是一句话摘要，`logic_description` 必须说明输入、校验、处理步骤、外部调用、成功响应和错误分支。
@@ -69,6 +69,8 @@
 - 不提供预置业务示例；所有 `example` 值必须来自当前需求和代码实际行为。文档、代码和工具参数中不得出现真实 Token、密码、Cookie、Authorization 值或验证码。
 
 调用预览前必须按上述规则递归自检一次请求和所有响应；不要依靠重复调用预览工具逐项发现缺失字段。
+
+接口文档补丁失败时，只根据错误中的操作序号和 JSON Pointer 路径修正对应操作；`test` 失败表示补丁前置条件冲突，必须重新读取当前接口文档和 `expected_version` 后再生成补丁。错误响应不会回显补丁 value，不要自行把敏感值写入错误说明，也不要为修复单个路径重写整份文档。
 
 只有 `flow_preview_script_change` 成功返回 `preview_id` 才能向用户说明预览已通过；此时所有 `input_normalizations` 和 `interface_doc_normalizations` 都已经写入当前待发布预览，`preview_ready=true`、`requires_repreview=false`，应展示纠正内容并等待用户确认，不得仅因发生兼容纠正就重写文档或再次预览。`isError=true`、`-32602` 或没有 `preview_id` 才表示预览失败，此时只修正错误指出的路径。建议显式传 `operation`；MCP 会兼容漏传该字段，没有 `script_id` 时推断为 `create`，有 `script_id` 时推断为 `update`，并通过 `input_normalizations` 说明。创建时省略 `expected_version`；MCP 仅为兼容模型常见误传而自动忽略 `expected_version=0`。
 

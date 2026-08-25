@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   assertCompleteInterfaceDoc,
+  assertInterfaceDocPatch,
   interfaceDocCompletenessIssues,
+  interfaceDocPatchSchema,
   normalizeInterfaceDocument,
 } from "./interface-doc";
 
@@ -481,5 +483,23 @@ describe("interfaceDocCompletenessIssues", () => {
     expect(trace.description).toBe("根据 HTTP 请求头生成的业务跟踪值");
     expect(trace.example).toBe("input.body");
     expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
+  });
+});
+
+describe("interfaceDocPatch", () => {
+  test("accepts all RFC 6902 operation shapes and enforces the limit", () => {
+    const patch = [
+      { op: "add", path: "/summary", value: "新的摘要" },
+      { op: "remove", path: "/usage_refs/0" },
+      { op: "replace", path: "/title", value: "新标题" },
+      { op: "move", from: "/title", path: "/summary" },
+      { op: "copy", from: "/summary", path: "/title" },
+      { op: "test", path: "/title", value: "新标题" },
+    ];
+    expect(interfaceDocPatchSchema.safeParse(patch).success).toBe(true);
+    expect(() => assertInterfaceDocPatch(patch)).not.toThrow();
+    expect(() => assertInterfaceDocPatch([
+      { op: "add", path: "/summary", value: "x", extra: true },
+    ])).toThrow("interface_doc_patch 格式无效");
   });
 });

@@ -176,6 +176,12 @@ describe("MCP tool metadata", () => {
           properties?: Record<string, unknown>;
         }
       | undefined;
+    const interfaceDocPatch = byName.get("flow_preview_script_change")?.inputSchema.properties?.interface_doc_patch as
+      | { type?: string; maxItems?: number; items?: unknown }
+      | undefined;
+    expect(interfaceDocPatch?.type).toBe("array");
+    expect(interfaceDocPatch?.maxItems).toBe(256);
+    expect(interfaceDocPatch?.items).toBeDefined();
     expect(interfaceDoc?.type).toBe("object");
     expect(interfaceDoc?.properties).toMatchObject({
       schema_version: { const: "script-interface-doc.v1" },

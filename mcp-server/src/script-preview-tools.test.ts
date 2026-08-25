@@ -246,6 +246,55 @@ describe("script preview tool", () => {
     ]);
   });
 
+  test("previews and publishes an interface document patch without a full document", async () => {
+    const patch = [
+      { op: "replace", path: "/summary", value: "更新后的摘要" },
+      { op: "add", path: "/responses/-", value: {
+        status: 201,
+        description: "创建成功",
+        content_type: "application/json",
+        schema: { type: "object" },
+        example: {},
+      } },
+    ];
+    const previewResponse = await client.callTool({
+      name: "flow_preview_script_change",
+      arguments: {
+        operation: "update",
+        script_id: "patch-update",
+        expected_version: 1,
+        interface_doc_patch: patch,
+      },
+    });
+    expect(previewResponse.isError).not.toBe(true);
+    const previewContent = previewResponse.content.find((item) => item.type === "text");
+    if (!previewContent || previewContent.type !== "text") throw new Error("preview did not return text");
+    const preview = JSON.parse(previewContent.text) as Record<string, unknown>;
+    expect(preview.changes).toMatchObject({ interface_doc: "patch", interface_doc_patch: true });
+    expect(preview.validation).toMatchObject({
+      data: {
+        interface_doc_patch_summary: {
+          operation_count: 2,
+          paths: ["/summary", "/responses/-"],
+          expected_version: 1,
+          current_version: 1,
+        },
+      },
+    });
+    expect((validationRequest?.interface_doc_patch as unknown[])).toEqual(patch);
+    expect(validationRequest?.expected_version).toBe(1);
+    expect(validationRequest?.interface_doc).toBeUndefined();
+
+    const applyResponse = await client.callTool({
+      name: "flow_apply_script_change",
+      arguments: { preview_id: preview.preview_id, confirm: true },
+    });
+    expect(applyResponse.isError).not.toBe(true);
+    expect(updateRequest?.interface_doc_patch).toEqual(patch);
+    expect(updateRequest?.interface_doc).toBeUndefined();
+    expect(updateRequest?.expected_version).toBe(1);
+  });
+
   test("rejects server environment access before API validation", async () => {
     for (const code of [
       "return process.env.BAIDU_MAP_AK;",
