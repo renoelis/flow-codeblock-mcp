@@ -5,7 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { codeWriterContext } from "./code-writer";
-import { interfaceDocInputDescription } from "./interface-doc";
+import { interfaceDocInputDescription, normalizeInterfaceDocument } from "./interface-doc";
 import { assertScriptChangeInput } from "./script-change";
 
 const configuredBaseUrl = process.env.FLOW_CODEBLOCK_BASE_URL?.trim();
@@ -206,7 +206,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.11" },
+  { name: "flow-codeblock", version: "0.2.12" },
   { instructions: serverInstructions },
 );
 
@@ -518,57 +518,75 @@ server.registerTool(
   "flow_preview_script_change",
   {
     title: "预览并校验脚本变更",
-    description: "任何脚本创建或更新的必经第 1 步，不写数据库、不扣执行配额，返回 10 分钟有效的 preview_id。若本轮还没有脚本代码与文档契约，先调用 flow_write_code(mode=script)，再一次性自检代码和完整 interface_doc，避免依靠重复预览逐项修错。create：必须带 code/code_base64 和 interface_doc，不带 script_id/expected_version；description 未指定时建议不超过 15 个字符。update：先 flow_get_script 读取当前版本，必须带 script_id、expected_version 和至少一个变更；代码变化必须同时带完整文档，文档或代码变化生成新版本，仅 description/IP 变化不生成版本；ip_whitelist=null 或 [] 表示清除。更新会先校验脚本存在且版本未变。预览成功后先向用户展示结果，不能自动发布。MCP 不支持删除。",
+    description: "任何脚本创建或更新的必经第 1 步，不写数据库、不扣执行配额，返回 10 分钟有效的 preview_id。若本轮还没有脚本代码与文档契约，先调用 flow_write_code(mode=script)，再一次性自检代码和完整 interface_doc，避免依靠重复预览逐项修错。MCP 会先纠正 interface_doc 中可无歧义识别的常见位置错误，并在 interface_doc_normalizations 中返回修正记录；仍有错误时必须保留原文档，仅修正错误列表中的路径，不得重写或删除其他字段。create：必须带 code/code_base64 和 interface_doc，不带 script_id/expected_version；description 未指定时建议不超过 15 个字符。update：先 flow_get_script 读取当前版本，必须带 script_id、expected_version 和至少一个变更；代码变化必须同时带完整文档，文档或代码变化生成新版本，仅 description/IP 变化不生成版本；ip_whitelist=null 或 [] 表示清除。更新会先校验脚本存在且版本未变。预览成功后先向用户展示结果，不能自动发布。MCP 不支持删除。",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: changeSchema,
   },
   async (input) => {
     try {
       purgePreviews();
-      assertScriptChangeInput(input);
-      if (input.operation === "update") {
-        await assertUpdateTarget(input.script_id!, input.expected_version!);
+      const interfaceDocNormalization = input.interface_doc === undefined
+        ? { document: undefined, changes: [] }
+        : normalizeInterfaceDocument(input.interface_doc);
+      const preparedInput = input.interface_doc === undefined
+        ? input
+        : { ...input, interface_doc: interfaceDocNormalization.document };
+      try {
+        assertScriptChangeInput(preparedInput);
+      } catch (error) {
+        if (error instanceof Error && interfaceDocNormalization.changes.length > 0) {
+          throw new Error(
+            `${error.message}\n本次已自动规范化：\n- ${interfaceDocNormalization.changes.join("\n- ")}`,
+          );
+        }
+        throw error;
       }
-      const hasCode = input.code !== undefined || input.code_base64 !== undefined;
-      const codeBase64 = hasCode ? encodeCode(input.code, input.code_base64) : undefined;
-      const validation = hasCode || input.interface_doc !== undefined || input.ip_whitelist !== undefined
+      if (preparedInput.operation === "update") {
+        await assertUpdateTarget(preparedInput.script_id!, preparedInput.expected_version!);
+      }
+      const hasCode = preparedInput.code !== undefined || preparedInput.code_base64 !== undefined;
+      const codeBase64 = hasCode ? encodeCode(preparedInput.code, preparedInput.code_base64) : undefined;
+      const validation = hasCode || preparedInput.interface_doc !== undefined || preparedInput.ip_whitelist !== undefined
         ? await apiRequest("/flow/scripts/validate", {
             method: "POST",
             body: JSON.stringify({
               ...(codeBase64 !== undefined ? { code_base64: codeBase64 } : {}),
-              ...(input.operation === "update" ? { script_id: input.script_id } : {}),
-              ...(input.ip_whitelist !== undefined ? { ip_whitelist: input.ip_whitelist } : {}),
-              ...(input.interface_doc !== undefined ? { interface_doc: input.interface_doc } : {}),
+              ...(preparedInput.operation === "update" ? { script_id: preparedInput.script_id } : {}),
+              ...(preparedInput.ip_whitelist !== undefined ? { ip_whitelist: preparedInput.ip_whitelist } : {}),
+              ...(preparedInput.interface_doc !== undefined ? { interface_doc: preparedInput.interface_doc } : {}),
             }),
           })
         : { valid: true, warnings: [], message: "未提交代码或接口文档，仅更新描述/IP 白名单" };
       const payload: Record<string, unknown> = {
-        ...(input.operation === "update" ? { script_id: input.script_id, expected_version: input.expected_version } : {}),
+        ...(preparedInput.operation === "update" ? { script_id: preparedInput.script_id, expected_version: preparedInput.expected_version } : {}),
         ...(codeBase64 !== undefined ? { code_base64: codeBase64 } : {}),
-        ...(input.description !== undefined ? { description: input.description } : {}),
-        ...(input.ip_whitelist !== undefined ? { ip_whitelist: input.ip_whitelist } : {}),
-        ...(input.interface_doc !== undefined ? { interface_doc: input.interface_doc } : {}),
+        ...(preparedInput.description !== undefined ? { description: preparedInput.description } : {}),
+        ...(preparedInput.ip_whitelist !== undefined ? { ip_whitelist: preparedInput.ip_whitelist } : {}),
+        ...(preparedInput.interface_doc !== undefined ? { interface_doc: preparedInput.interface_doc } : {}),
       };
       const previewId = randomUUID();
-      const storedPayload = input.operation === "create" && input.interface_doc !== undefined
-        ? { ...payload, interface_doc: removeCreatePath(input.interface_doc) }
+      const storedPayload = preparedInput.operation === "create" && preparedInput.interface_doc !== undefined
+        ? { ...payload, interface_doc: removeCreatePath(preparedInput.interface_doc) }
         : payload;
       const preview = {
         preview_id: previewId,
-        operation: input.operation,
+        operation: preparedInput.operation,
         expires_at: new Date(Date.now() + previewTtlMs).toISOString(),
         validation,
+        ...(interfaceDocNormalization.changes.length > 0
+          ? { interface_doc_normalizations: interfaceDocNormalization.changes }
+          : {}),
         changes: {
-          code: codeBase64 === undefined ? false : input.code !== undefined ? "provided" : "base64 provided",
-          description: input.description !== undefined,
-          ip_whitelist: input.ip_whitelist !== undefined,
-          interface_doc: input.interface_doc !== undefined,
+          code: codeBase64 === undefined ? false : preparedInput.code !== undefined ? "provided" : "base64 provided",
+          description: preparedInput.description !== undefined,
+          ip_whitelist: preparedInput.ip_whitelist !== undefined,
+          interface_doc: preparedInput.interface_doc !== undefined,
         },
       };
       previewStore.set(previewId, {
         expiresAt: Date.now() + previewTtlMs,
-        fingerprint: fingerprint(input.operation, storedPayload),
-        operation: input.operation,
+        fingerprint: fingerprint(preparedInput.operation, storedPayload),
+        operation: preparedInput.operation,
         payload: storedPayload,
       });
       return result(preview);

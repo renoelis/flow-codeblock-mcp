@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { interfaceDocCompletenessIssues } from "./interface-doc";
+import { interfaceDocCompletenessIssues, normalizeInterfaceDocument } from "./interface-doc";
 
 function field(type: string, description: string, example: unknown) {
   return { type, description, example };
@@ -101,5 +101,41 @@ describe("interfaceDocCompletenessIssues", () => {
       example: 1,
     };
     expect(interfaceDocCompletenessIssues(document, "create")).toEqual([]);
+  });
+
+  test("normalizes misplaced schema fields and promotes schema root examples", () => {
+    const document = completePostDocument();
+    const body = document.request.body as Record<string, unknown>;
+    const bodySchema = body.schema as Record<string, unknown>;
+    bodySchema.example = body.example;
+    body.properties = bodySchema.properties;
+    body.required = bodySchema.required;
+    delete body.example;
+    delete bodySchema.properties;
+    delete bodySchema.required;
+
+    const response = document.responses[0] as Record<string, unknown>;
+    const responseSchema = response.schema as Record<string, unknown>;
+    responseSchema.example = response.example;
+    delete response.example;
+
+    const normalized = normalizeInterfaceDocument(document);
+    expect(normalized.changes).toEqual([
+      "interface_doc.request.body.properties 已移入 interface_doc.request.body.schema.properties",
+      "interface_doc.request.body.required 已移入 interface_doc.request.body.schema.required",
+      "interface_doc.request.body.example 已从 interface_doc.request.body.schema.example 提升",
+      "interface_doc.responses[0].example 已从 interface_doc.responses[0].schema.example 提升",
+    ]);
+    expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
+  });
+
+  test("allows optional properties to be omitted from wrapper examples", () => {
+    const document = completePostDocument();
+    document.request.body.schema.properties.optionalNote = field("string", "可选备注", "示例备注");
+    expect(interfaceDocCompletenessIssues(document, "create")).toEqual([]);
+
+    document.request.body.schema.required.push("optionalNote");
+    const issues = interfaceDocCompletenessIssues(document, "create");
+    expect(issues).toContain("interface_doc.request.body.example 缺少 required 字段 optionalNote");
   });
 });

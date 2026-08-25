@@ -14,14 +14,20 @@ export const interfaceDocNestedRules = [
   "请求体或响应体的根 Schema 节点必须填写 type；其所有嵌套 Schema 节点（包括 properties 字段、array.items 和 additionalProperties 的值 Schema）都必须填写 type、description 和 example。",
   "固定字段对象必须有 properties，并为每个字段填写名称、type、description、example；动态键字典必须用 additionalProperties 描述完整的值 Schema；二者不能同时缺失。",
   "每个 type=array 都必须有 items，且 items 本身必须填写 type、description 和 example；items.type=object 时还必须有完整 items.properties。数组 example 中的每个对象都必须覆盖 items.properties 的全部字段。",
-  "任意层级 properties 与对应 example 字段必须双向一致；properties 中的字段即使运行时可选，也必须出现在完整 example 中。",
+  "任意层级 example 中出现的字段必须有对应 properties 或 additionalProperties；properties 中列入 required 的字段必须出现在 example 中，运行时可选字段可以省略。",
   "JSON Schema 的 required 只表示运行时真正必填的业务字段；成功和错误结构不同应拆成不同 responses。",
+];
+
+export const interfaceDocRepairRules = [
+  "保留原 interface_doc 中未报错的字段，只修正错误列表指出的路径；不要为了修复单个字段而重写或删减 responses、logic_description 或 request。",
+  "规范结构中 request.body 和每个 response 的 example 与 schema 同级；properties、required、items、additionalProperties 属于 schema。MCP 会兼容纠正这些字段的常见错位，并在预览结果中列出 interface_doc_normalizations。",
 ];
 
 export const interfaceDocInputDescription = [
   "创建和代码更新时必填完整 script-interface-doc.v1；只改 description/ip_whitelist 时可省略。",
   "字段位置：根对象包含 schema_version='script-interface-doc.v1'、title、summary、endpoint、request?、responses、logic_description、usage_refs?；endpoint={methods,path?,description}；request={query?,headers?,body?}；query/headers 为 parameter 数组；body={content_type='application/json',schema,example}；responses 的每项={status,description,content_type='application/json',schema,example}。",
   `必填结构：${Object.entries(interfaceDocRequiredFields).map(([key, fields]) => `${key}=[${fields.join(",")}]`).join("；")}。`,
+  ...interfaceDocRepairRules,
   ...interfaceDocNestedRules,
 ].join(" ");
 
@@ -31,6 +37,43 @@ function isObject(value: unknown): value is JsonObject {
 
 function hasOwn(object: JsonObject, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+const schemaPlacementKeys = ["properties", "required", "items", "additionalProperties"] as const;
+
+function normalizeSchemaContainer(container: JsonObject, path: string, changes: string[]): void {
+  if (!isObject(container.schema)) return;
+
+  for (const key of schemaPlacementKeys) {
+    if (hasOwn(container, key) && !hasOwn(container.schema, key)) {
+      container.schema[key] = container[key];
+      delete container[key];
+      changes.push(`${path}.${key} 已移入 ${path}.schema.${key}`);
+    }
+  }
+
+  if (!hasOwn(container, "example") && hasOwn(container.schema, "example")) {
+    container.example = structuredClone(container.schema.example);
+    changes.push(`${path}.example 已从 ${path}.schema.example 提升`);
+  }
+}
+
+export function normalizeInterfaceDocument(document: unknown): { document: unknown; changes: string[] } {
+  if (!isObject(document)) return { document, changes: [] };
+
+  const normalized = structuredClone(document) as JsonObject;
+  const changes: string[] = [];
+  if (isObject(normalized.request) && isObject(normalized.request.body)) {
+    normalizeSchemaContainer(normalized.request.body, "interface_doc.request.body", changes);
+  }
+  if (Array.isArray(normalized.responses)) {
+    normalized.responses.forEach((response, index) => {
+      if (isObject(response)) {
+        normalizeSchemaContainer(response, `interface_doc.responses[${index}]`, changes);
+      }
+    });
+  }
+  return { document: normalized, changes };
 }
 
 function requireText(object: JsonObject, key: string, path: string, issues: string[], minLength = 1): void {
@@ -106,6 +149,11 @@ function validateSchemaExampleCoverage(
   }
 
   if (properties) {
+    const requiredFields = new Set(
+      Array.isArray(schema.required)
+        ? schema.required.filter((field): field is string => typeof field === "string")
+        : [],
+    );
     for (const [key, propertySchema] of Object.entries(properties)) {
       const propertyPath = `${schemaPath}.properties.${key}`;
       if (!isObject(propertySchema)) {
@@ -114,7 +162,9 @@ function validateSchemaExampleCoverage(
       }
       validateFieldSchemaMetadata(propertySchema, propertyPath, issues);
       if (!hasOwn(example, key)) {
-        issues.push(`${examplePath} 缺少字段 ${key}；properties 中的字段即使运行时可选，也必须出现在完整值中`);
+        if (requiredFields.has(key)) {
+          issues.push(`${examplePath} 缺少 required 字段 ${key}`);
+        }
       } else {
         validateSchemaExampleCoverage(propertySchema, example[key], propertyPath, `${examplePath}.${key}`, issues, false, true);
       }
@@ -285,7 +335,7 @@ export function assertCompleteInterfaceDoc(document: unknown, operation: "create
   const issues = interfaceDocCompletenessIssues(document, operation);
   if (issues.length > 0) {
     throw new Error(
-      `interface_doc 完整性校验失败：\n- ${issues.join("\n- ")}\n修复规则：\n- ${interfaceDocNestedRules.join("\n- ")}`,
+      `interface_doc 完整性校验失败：\n- ${issues.join("\n- ")}\n修复方式：\n- ${interfaceDocRepairRules.join("\n- ")}\n完整性规则：\n- ${interfaceDocNestedRules.join("\n- ")}`,
     );
   }
 }

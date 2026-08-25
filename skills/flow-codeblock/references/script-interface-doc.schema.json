@@ -60,7 +60,7 @@
       "properties": {
         "content_type": {"const": "application/json"},
         "schema": {"$ref": "#/$defs/schema_root"},
-        "example": {"description": "必须填写与 schema 完全一致的调用方请求体值。"}
+        "example": {"description": "必须填写与 schema 一致的调用方请求体值，并覆盖 schema.required 字段；运行时可选字段可以省略。"}
       }
     },
     "response": {
@@ -72,7 +72,7 @@
         "description": {"type": "string", "minLength": 1, "maxLength": 4000},
         "content_type": {"const": "application/json"},
         "schema": {"$ref": "#/$defs/schema_root"},
-        "example": {"description": "必须填写与 schema 完全一致的响应值。"}
+        "example": {"description": "必须填写与 schema 一致的响应值，并覆盖 schema.required 字段；运行时可选字段可以省略。"}
       }
     },
     "schema_root": {

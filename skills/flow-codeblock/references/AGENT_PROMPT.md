@@ -58,7 +58,7 @@
 - 响应 Schema 中每个字段必须填写 `type/description/example`；字段名称由 `properties` 的键表达。
 - 请求体或响应体的根 Schema 节点必须填写 `type`；其所有嵌套 Schema 节点（包括 `properties` 字段、数组的 `items`、`additionalProperties` 值 Schema）都必须填写 `type/description/example`；固定字段对象必须有完整 `properties`；动态键字典必须用 `additionalProperties` 描述值 Schema。
 - 每个数组必须有 `items`，且 `items` 本身也必须填写 `type/description/example`；`items.type=object` 时还必须有完整 `items.properties`，数组值中的每个对象必须覆盖全部字段。
-- 请求体和响应体任意层级的 `properties` 与对应值必须双向完全一致；运行时可选字段也必须出现在完整值中。
+- 请求体和响应体任意层级的示例中，出现的字段必须有对应 `properties` 或 `additionalProperties`；列入 `required` 的字段必须出现在示例中，运行时可选字段可以省略。
 - JSON Schema 的 `required` 只写运行时真正必填的业务字段；成功和错误结构不同应拆成不同响应。
 - `logic_description` 必须具体说明请求字段、校验、处理步骤、是否调用外部接口、成功响应和错误分支。
 - 文档面向调用方，只写查询参数、请求头、请求体和 Cookie；不得出现 `input.query`、`input.header`、`input.body`、`input.cookies` 等内部结构。调用方 POST 业务 JSON 直接放请求体，不包装为 `input`。
@@ -67,6 +67,8 @@
 - 不提供预置业务示例；所有 `example` 值必须来自当前需求和代码实际行为。文档、代码和工具参数中不得出现真实 Token、密码、Cookie、Authorization 值或验证码。
 
 调用预览前必须按上述规则递归自检一次请求和所有响应；不要依靠重复调用预览工具逐项发现缺失字段。
+
+规范结构中，请求体和每个响应的完整 `example` 与 `schema` 同级，`properties/required/items/additionalProperties` 放在 `schema` 内。MCP 会在预览前兼容纠正这两类无歧义的位置错误；预览成功时通过 `interface_doc_normalizations` 返回修正记录，仍有错误时在错误文本的“本次已自动规范化”中返回。保留原文档和所有未报错字段，只修正错误列表中的准确路径；不要重写整份文档，也不要删除已有的 `responses`、`logic_description` 或 `request`。
 
 ## 原生能力和模块
 

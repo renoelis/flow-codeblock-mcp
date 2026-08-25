@@ -110,6 +110,8 @@ describe("MCP tool metadata", () => {
     expect(byName.get("flow_execute_script")?.description).toContain("不要包装为 {input:...} 或 {body:...}");
     expect(byName.get("flow_execute_code")?.description).toContain("input 参数在此模式会原样成为全局 input");
     expect(byName.get("flow_preview_script_change")?.description).toContain("ip_whitelist=null 或 [] 表示清除");
+    expect(byName.get("flow_preview_script_change")?.description).toContain("interface_doc_normalizations");
+    expect(byName.get("flow_preview_script_change")?.description).toContain("保留原文档");
     expect(byName.get("flow_apply_script_change")?.description).toContain("用户随后明确确认发布");
 
     for (const currentToolName of ["flow_get_script", "flow_get_script_documentation"]) {
