@@ -63,7 +63,7 @@
 - 请求体和响应体任意层级的示例中，出现的字段必须有对应 `properties` 或 `additionalProperties`，并且示例的 JSON 类型必须与对应 `type` 一致；列入 `required` 的字段必须出现在示例中，运行时可选字段可以省略。
 - JSON Schema 的 `required` 只写运行时真正必填的业务字段；成功和错误结构不同应拆成不同响应，同一状态码下字符串错误与对象错误等不同结构也应拆开描述。
 - `logic_description` 必须具体说明请求字段、校验、处理步骤、是否调用外部接口、成功响应和错误分支。
-- 文档面向调用方，只写查询参数、请求头、请求体和 Cookie；不得出现 `input.query`、`input.header`、`input.body`、`input.cookies` 等内部结构。调用方 POST 业务 JSON 直接放请求体，不包装为 `input`。
+- 文档面向调用方，只写查询参数、请求头、请求体和 Cookie；不得出现 `input.query`、`input.header`、`input.body`、`input.cookies` 等内部结构。调用方 POST 业务 JSON 直接放请求体，不包装为 `input`。MCP 会兼容将说明字段中误写的内部输入术语转换为调用方 HTTP 术语，但新文档应直接使用调用方表述。
 - `usage_refs` 可省略，仅有真实应用引用时填写 `{app_name,app_id?,location?,note?}` 对象数组；安全提示和普通说明写入 `logic_description`，不得把字符串数组放入 `usage_refs`。
 - JSON 代码块只能包含合法 JSON 对象，不得混入 Markdown、注释或尾随逗号。
 - 不提供预置业务示例；所有 `example` 值必须来自当前需求和代码实际行为。文档、代码和工具参数中不得出现真实 Token、密码、Cookie、Authorization 值或验证码。

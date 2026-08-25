@@ -41,6 +41,7 @@ export const interfaceDocRepairRules = [
   "每个 example 的类型必须与对应 type 一致；同一状态码存在字符串错误和对象错误等不同结构时，拆成多个 responses 分别描述。",
   "interface_doc 根对象只允许 schema_version/title/summary/endpoint/request/responses/logic_description/usage_refs；request 只允许 query/headers/body。ip_whitelist 是 flow_preview_script_change 的工具参数，不属于 interface_doc。",
   "schema.properties 只能放字段名到字段 Schema 的映射；schema.required 必须与 properties 同级，不能把 required: [] 放进 properties。",
+  "文档说明字段中的 input.query/input.header/input.body/input.cookies 等平台内部输入术语会自动转换为调用方 HTTP 术语；example、default 和 enum_values 中的业务值保持原样。新文档应直接使用 URL 查询参数、HTTP 请求头、HTTP 请求体和 Cookie。",
 ];
 
 export const interfaceDocInputDescription = [
@@ -305,6 +306,58 @@ function normalizeUsageRefs(document: JsonObject, changes: string[]): void {
   );
 }
 
+const documentationProseKeys = new Set(["summary", "description", "logic_description", "note"]);
+const documentationValueKeys = new Set(["example", "default", "enum_values"]);
+const internalInputTermPattern = /\binput\.(?:query|header|body|cookies)\b/i;
+const internalInputPhraseReplacements: Array<[RegExp, string]> = [
+  [/从\s*\binput\.query\b\s*读取(?:URL\s*)?查询参数/gi, "读取 URL 查询参数"],
+  [/从\s*\binput\.header\b\s*读取(?:HTTP\s*)?请求头/gi, "读取 HTTP 请求头"],
+  [/从\s*\binput\.body\b\s*读取(?:HTTP\s*)?请求体/gi, "读取 HTTP 请求体"],
+  [/从\s*\binput\.cookies\b\s*读取\s*Cookie/gi, "读取 Cookie"],
+];
+const internalInputTermReplacements: Array<[RegExp, string]> = [
+  [/\binput\.query\b/gi, "URL 查询参数"],
+  [/\binput\.header\b/gi, "HTTP 请求头"],
+  [/\binput\.body\b/gi, "HTTP 请求体"],
+  [/\binput\.cookies\b/gi, "Cookie"],
+];
+
+function publicDocumentationText(value: string): string {
+  const phraseRewritten = internalInputPhraseReplacements.reduce(
+    (rewritten, [pattern, replacement]) => rewritten.replace(pattern, replacement),
+    value,
+  );
+  const rewritten = internalInputTermReplacements.reduce(
+    (rewritten, [pattern, replacement]) => rewritten.replace(pattern, replacement),
+    phraseRewritten,
+  );
+  return rewritten
+    .replace(/(URL 查询参数|HTTP 请求头|HTTP 请求体|Cookie)\s+(?=[\u3400-\u9fff])/g, "$1");
+}
+
+function normalizeInternalInputTerms(value: unknown, path: string, changes: string[]): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => normalizeInternalInputTerms(item, `${path}[${index}]`, changes));
+    return;
+  }
+  if (!isObject(value)) return;
+
+  for (const [key, item] of Object.entries(value)) {
+    const itemPath = `${path}.${key}`;
+    if (documentationProseKeys.has(key) && typeof item === "string") {
+      const rewritten = publicDocumentationText(item);
+      if (rewritten !== item) {
+        value[key] = rewritten;
+        changes.push(`${itemPath} 已将平台内部输入术语转换为调用方 HTTP 术语`);
+      }
+      continue;
+    }
+    if (!documentationValueKeys.has(key)) {
+      normalizeInternalInputTerms(item, itemPath, changes);
+    }
+  }
+}
+
 function recoverInterfaceDocRootFields(
   document: JsonObject,
   recoveryFields: InterfaceDocRecoveryFields,
@@ -396,6 +449,7 @@ export function normalizeInterfaceDocument(
       }
     });
   }
+  normalizeInternalInputTerms(normalized, "interface_doc", changes);
   return { document: normalized, changes, recovered };
 }
 
@@ -612,19 +666,23 @@ function validateUsageRefs(value: unknown, issues: string[]): void {
 }
 
 function rejectInternalInputTerms(value: unknown, path: string, issues: string[]): void {
-  if (typeof value === "string") {
-    if (/\binput\.(?:query|header|body|cookies)\b/i.test(value)) {
-      issues.push(`${path} 面向接口调用方，不得出现 input.query/input.header/input.body/input.cookies 等平台内部结构`);
-    }
-    return;
-  }
   if (Array.isArray(value)) {
     value.forEach((item, index) => rejectInternalInputTerms(item, `${path}[${index}]`, issues));
     return;
   }
-  if (isObject(value)) {
-    for (const [key, item] of Object.entries(value)) {
-      rejectInternalInputTerms(item, `${path}.${key}`, issues);
+  if (!isObject(value)) return;
+
+  for (const [key, item] of Object.entries(value)) {
+    const itemPath = `${path}.${key}`;
+    if (
+      documentationProseKeys.has(key) &&
+      typeof item === "string" &&
+      internalInputTermPattern.test(item)
+    ) {
+      issues.push(`${itemPath} 面向接口调用方，不得出现 input.query/input.header/input.body/input.cookies 等平台内部结构`);
+    }
+    if (!documentationValueKeys.has(key)) {
+      rejectInternalInputTerms(item, itemPath, issues);
     }
   }
 }

@@ -199,6 +199,31 @@ describe("script preview tool", () => {
     expect(properties.data.additionalProperties).toBe(true);
   });
 
+  test("rewrites internal input terms in caller-facing documentation", async () => {
+    const interfaceDoc = misplacedInterfaceDoc();
+    interfaceDoc.logic_description = "脚本从 input.body 读取请求体并完成名称校验，成功时返回结果，失败时返回错误信息。";
+
+    const response = await client.callTool({
+      name: "flow_preview_script_change",
+      arguments: {
+        operation: "create",
+        code: "return { success: true };",
+        interface_doc: interfaceDoc,
+      },
+    });
+
+    expect(response.isError).not.toBe(true);
+    const content = response.content.find((item) => item.type === "text");
+    if (!content || content.type !== "text") throw new Error("preview did not return text");
+    const preview = JSON.parse(content.text) as Record<string, unknown>;
+    expect(preview.interface_doc_normalizations).toEqual(expect.arrayContaining([
+      "interface_doc.logic_description 已将平台内部输入术语转换为调用方 HTTP 术语",
+    ]));
+    const validatedDocument = validationRequest?.interface_doc as Record<string, unknown>;
+    expect(validatedDocument.logic_description).toContain("HTTP 请求体");
+    expect(validatedDocument.logic_description).not.toContain("input.body");
+  });
+
   test("recovers document fields misplaced at the tool argument level", async () => {
     const interfaceDoc = misplacedInterfaceDoc() as Record<string, unknown>;
     const responses = interfaceDoc.responses;

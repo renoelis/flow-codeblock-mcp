@@ -380,4 +380,30 @@ describe("interfaceDocCompletenessIssues", () => {
     expect(issues).toContain("interface_doc.endpoint.unsupported 不是支持的字段");
     expect(issues).toContain("interface_doc.request.unsupported 不是支持的字段");
   });
+
+  test("rewrites internal input terms only in documentation prose", () => {
+    const document = completePostDocument();
+    document.logic_description = "脚本从 input.body 读取请求体，并结合 input.query 和 input.header 完成校验，最后读取 input.cookies。";
+    document.responses[0].schema.properties.trace = {
+      type: "string",
+      description: "根据 input.header 生成的业务跟踪值",
+      example: "input.body",
+    };
+
+    const normalized = normalizeInterfaceDocument(document);
+    const normalizedDocument = normalized.document as typeof document;
+    const trace = normalizedDocument.responses[0].schema.properties.trace as Record<string, unknown>;
+    expect(normalized.changes).toEqual(expect.arrayContaining([
+      "interface_doc.logic_description 已将平台内部输入术语转换为调用方 HTTP 术语",
+      "interface_doc.responses[0].schema.properties.trace.description 已将平台内部输入术语转换为调用方 HTTP 术语",
+    ]));
+    expect(normalizedDocument.logic_description).toContain("脚本读取 HTTP 请求体");
+    expect(normalizedDocument.logic_description).toContain("HTTP 请求体");
+    expect(normalizedDocument.logic_description).toContain("URL 查询参数");
+    expect(normalizedDocument.logic_description).toContain("HTTP 请求头");
+    expect(normalizedDocument.logic_description).toContain("Cookie");
+    expect(trace.description).toBe("根据 HTTP 请求头生成的业务跟踪值");
+    expect(trace.example).toBe("input.body");
+    expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
+  });
 });

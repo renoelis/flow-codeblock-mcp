@@ -67,7 +67,7 @@ MCP 预览与 Flow Codeblock 页面、Rust 文档接口使用同一套必填契�
 
 `interface_doc` 根对象只放 `schema_version/title/summary/endpoint/request/responses/logic_description/usage_refs`；`request` 只放 `query/headers/body`；`ip_whitelist` 是 `flow_preview_script_change` 的工具参数，不放进 `interface_doc`。`responses/logic_description` 必须放在 `interface_doc` 根对象内；请求体和每个响应的完整 `example` 与 `schema` 同级，`request.example` 应写成 `request.body.example`，`properties/required/items/additionalProperties` 放在 `schema` 内。MCP 会在预览前兼容纠正这些无歧义的位置错误，从父级示例或同名蛇形/驼峰别名补全可推导的节点示例，并移除 `usage_refs` 中无效的非对象条目；预览成功时通过 `interface_doc_normalizations` 返回修正记录，仍有错误时在错误文本的“本次已自动规范化”中返回。必须保留原文档及所有未报错字段，只修正错误列表中的准确路径；不得重写整份文档或删除 `responses`、`logic_description`、`request`。
 
-文档面向调用方，说明文字不得出现 `input.query/input.header/input.body/input.cookies`。Web 页面录入和 MCP 创建时 `endpoint.path` 可省略；更新文档时填写实际脚本路径。不要提供预置业务示例，所有 `example` 值必须来自当前需求和代码实际行为。
+文档面向调用方，说明文字不得出现 `input.query/input.header/input.body/input.cookies`；MCP 会兼容将说明字段中误写的内部输入术语转换为调用方 HTTP 术语，`example/default/enum_values` 中的业务值保持原样。Web 页面录入和 MCP 创建时 `endpoint.path` 可省略；更新文档时填写实际脚本路径。不要提供预置业务示例，所有 `example` 值必须来自当前需求和代码实际行为。
 
 ## 所有权
 
