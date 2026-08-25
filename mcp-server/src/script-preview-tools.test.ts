@@ -146,6 +146,46 @@ describe("script preview tool", () => {
     expect(properties.storeInfo.example).toEqual({ id: "STORE-001" });
   });
 
+  test("normalizes misplaced response schema keywords and null placeholders", async () => {
+    const interfaceDoc = misplacedInterfaceDoc();
+    const response = interfaceDoc.responses[0] as Record<string, unknown>;
+    const responseSchema = response.schema as Record<string, unknown>;
+    const responseProperties = responseSchema.properties as Record<string, unknown>;
+    responseProperties.required = ["success"];
+    responseProperties.additionalProperties = false;
+    response.responses_placeholder = null;
+
+    const result = await client.callTool({
+      name: "flow_preview_script_change",
+      arguments: {
+        operation: "create",
+        code: "return { success: true };",
+        interface_doc: interfaceDoc,
+      },
+    });
+
+    expect(result.isError).not.toBe(true);
+    const content = result.content.find((item) => item.type === "text");
+    if (!content || content.type !== "text") throw new Error("preview did not return text");
+    const preview = JSON.parse(content.text) as Record<string, unknown>;
+    expect(preview.interface_doc_normalizations).toEqual(expect.arrayContaining([
+      "interface_doc.responses[0].responses_placeholder 空占位字段已移除",
+      "interface_doc.responses[0].schema.properties.required 已移入 interface_doc.responses[0].schema.required",
+      "interface_doc.responses[0].schema.properties.additionalProperties 已移入 interface_doc.responses[0].schema.additionalProperties",
+    ]));
+
+    const validatedDocument = validationRequest?.interface_doc as Record<string, unknown>;
+    const validatedResponses = validatedDocument.responses as Array<Record<string, unknown>>;
+    const validatedResponse = validatedResponses[0];
+    const validatedSchema = validatedResponse.schema as Record<string, unknown>;
+    const validatedProperties = validatedSchema.properties as Record<string, unknown>;
+    expect(validatedSchema.required).toEqual(["success"]);
+    expect(validatedSchema.additionalProperties).toBe(false);
+    expect(validatedProperties).not.toHaveProperty("required");
+    expect(validatedProperties).not.toHaveProperty("additionalProperties");
+    expect(validatedResponse).not.toHaveProperty("responses_placeholder");
+  });
+
   test("reports applied normalizations when other document errors remain", async () => {
     const interfaceDoc = misplacedInterfaceDoc() as Record<string, unknown>;
     delete interfaceDoc.logic_description;

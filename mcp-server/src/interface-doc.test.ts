@@ -196,6 +196,35 @@ describe("interfaceDocCompletenessIssues", () => {
     expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
   });
 
+  test("recovers misplaced boolean additionalProperties and removes null response placeholders", () => {
+    const document = completePostDocument();
+    const response = document.responses[0] as Record<string, unknown>;
+    const responseSchema = response.schema as Record<string, unknown>;
+    const responseProperties = responseSchema.properties as Record<string, unknown>;
+    responseProperties.required = responseSchema.required;
+    responseProperties.additionalProperties = responseSchema.additionalProperties;
+    delete responseSchema.required;
+    delete responseSchema.additionalProperties;
+    response.responses_placeholder = null;
+
+    const normalized = normalizeInterfaceDocument(document);
+    const normalizedDocument = normalized.document as typeof document;
+    const normalizedResponse = normalizedDocument.responses[0] as Record<string, unknown>;
+    const normalizedSchema = normalizedResponse.schema as Record<string, unknown>;
+    const normalizedProperties = normalizedSchema.properties as Record<string, unknown>;
+    expect(normalized.changes).toEqual(expect.arrayContaining([
+      "interface_doc.responses[0].responses_placeholder 空占位字段已移除",
+      "interface_doc.responses[0].schema.properties.required 已移入 interface_doc.responses[0].schema.required",
+      "interface_doc.responses[0].schema.properties.additionalProperties 已移入 interface_doc.responses[0].schema.additionalProperties",
+    ]));
+    expect(normalizedSchema.required).toEqual(["success"]);
+    expect(normalizedSchema.additionalProperties).toBe(false);
+    expect(normalizedProperties).not.toHaveProperty("required");
+    expect(normalizedProperties).not.toHaveProperty("additionalProperties");
+    expect(normalizedResponse).not.toHaveProperty("responses_placeholder");
+    expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
+  });
+
   test("recovers root fields and tool fields misplaced inside interface_doc", () => {
     const document = completePostDocument() as Record<string, unknown>;
     const request = document.request as Record<string, unknown>;

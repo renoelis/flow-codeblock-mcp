@@ -40,7 +40,7 @@ export const interfaceDocRepairRules = [
   "对象字段已能从代码或 example 确定时，在该对象上使用 properties 逐项描述；只有键名未知且每个动态值都符合同一 Schema 时才使用对象形式 additionalProperties。脚本原样透传且结构确实未知的上游 JSON 对象使用 additionalProperties=true；错误路径以 .additionalProperties 结尾且父对象键名已知时，应修正父对象的 properties，不要继续嵌套空 additionalProperties。",
   "每个 example 的类型必须与对应 type 一致；同一状态码存在字符串错误和对象错误等不同结构时，拆成多个 responses 分别描述。",
   "interface_doc 根对象只允许 schema_version/title/summary/endpoint/request/responses/logic_description/usage_refs；request 只允许 query/headers/body。ip_whitelist 是 flow_preview_script_change 的工具参数，不属于 interface_doc。",
-  "schema.properties 只能放字段名到字段 Schema 的映射；schema.required 必须与 properties 同级，不能把 required: [] 放进 properties。",
+  "schema.properties 只能放字段名到字段 Schema 的映射；schema.required 必须与 properties 同级，schema.additionalProperties 也必须与 properties 同级，不能把 required: [] 或布尔 additionalProperties 放进 properties。",
   "文档说明字段中的 input.query/input.header/input.body/input.cookies 等平台内部输入术语会自动转换为调用方 HTTP 术语；example、default 和 enum_values 中的业务值保持原样。新文档应直接使用 URL 查询参数、HTTP 请求头、HTTP 请求体和 Cookie。",
 ];
 
@@ -156,6 +156,18 @@ function normalizeSchemaNodeExamples(
       changes.push(`${path}.properties.required 已移除；${path}.required 已存在`);
     }
     delete (schema.properties as JsonObject).required;
+  }
+  const misplacedAdditionalProperties = isObject(schema.properties)
+    ? schema.properties.additionalProperties
+    : undefined;
+  if (typeof misplacedAdditionalProperties === "boolean") {
+    if (!hasOwn(schema, "additionalProperties")) {
+      schema.additionalProperties = misplacedAdditionalProperties;
+      changes.push(`${path}.properties.additionalProperties 已移入 ${path}.additionalProperties`);
+    } else {
+      changes.push(`${path}.properties.additionalProperties 已移除；${path}.additionalProperties 已存在`);
+    }
+    delete (schema.properties as JsonObject).additionalProperties;
   }
   const properties = isObject(schema.properties) ? schema.properties : undefined;
   const objectExample = isObject(example) ? example : undefined;
@@ -445,7 +457,12 @@ export function normalizeInterfaceDocument(
   if (Array.isArray(normalized.responses)) {
     normalized.responses.forEach((response, index) => {
       if (isObject(response)) {
-        normalizeSchemaContainer(response, `interface_doc.responses[${index}]`, changes);
+        const responsePath = `interface_doc.responses[${index}]`;
+        if (hasOwn(response, "responses_placeholder") && response.responses_placeholder === null) {
+          delete response.responses_placeholder;
+          changes.push(`${responsePath}.responses_placeholder 空占位字段已移除`);
+        }
+        normalizeSchemaContainer(response, responsePath, changes);
       }
     });
   }
