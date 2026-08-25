@@ -9,7 +9,7 @@ description: 使用 Flow Codeblock MCP 工具写出非脚本代码或创建、�
 
 ## 边界
 
-- MCP 必须从环境读取 `FLOW_CODEBLOCK_BASE_URL` 和 `FLOW_CODEBLOCK_TOKEN`；缺少任一变量时拒绝启动。公网服务使用 `https://qingcode.oalite.com`，仅本机部署 Rust 服务时使用对应的 localhost 地址。不要把 Token 放入工具参数、代码或文档。
+- MCP 必须从环境读取 `FLOW_CODEBLOCK_BASE_URL` 和 `FLOW_CODEBLOCK_TOKEN`；缺少任一变量时拒绝启动。公网服务使用 `https://qingcode.oalite.com`，仅本机部署 Rust 服务时使用对应的 localhost 地址。脚本发布后的最终调用地址固定为 `FLOW_CODEBLOCK_BASE_URL + /flow/codeblock/{script_id}`，由 `flow_apply_script_change` 在 `data.script_url` 返回，不要询问用户域名。不要把 Token 放入工具参数、代码或文档。
 - 不提供脚本删除、Token 管理或任意 HTTP 代理工具。删除请求必须拒绝，并引导用户使用现有网页或 REST API。
 - 执行工具使用 MCP Web worker lane，但仍执行服务端认证、配额、限流、安全校验、审计和统计。
 - 锁定、解锁、释放和所有权转移只能使用对应验证码工具，不猜测、记录或复用验证码。
@@ -51,7 +51,7 @@ MCP 预览与 Flow Codeblock 页面、Rust 文档接口使用同一套必填契�
 
 - 文档必填：`schema_version/title/summary/endpoint/responses/logic_description`；没有实际参数时 `request` 可省略；`usage_refs` 始终可省略，仅有真实应用引用时填写 `{app_name,app_id?,location?,note?}` 对象数组，普通说明写入 `logic_description`；
 - `title` 是文档标题，`summary` 是一句话摘要，`logic_description` 必须具体说明输入、校验、处理步骤、外部调用、成功响应和错误分支；
-- `endpoint` 必填 `methods/description`；`methods` 只能是 `GET`、`POST`；Web 页面录入时 `path` 可省略，MCP 创建时也可省略，更新时必填实际路径；最终调用地址是用户提供的域名加 `/flow/codeblock/{{脚本ID}}`，用户未提供域名时先询问，不得猜测；
+- `endpoint` 必填 `methods/description`；`methods` 只能是 `GET`、`POST`；Web 页面录入时 `path` 可省略，MCP 创建时也可省略，更新时必填实际路径；最终调用地址固定为 `FLOW_CODEBLOCK_BASE_URL + /flow/codeblock/{{脚本ID}}`，发布成功后直接使用工具返回的 `data.script_url`，不要询问用户域名；
 - 查询参数、请求头和请求体字段只有实际存在时才填写，并且必须提供名称、类型、描述和具体值；参数对象同时保留 `required` 表示运行时是否必填；需要描述 POST 请求体时填写 `content_type/schema/example`；
 - 每个响应必填 `status/description/content_type/schema/example`；
 - 响应 Schema 中每个字段必须填写 `type/description/example`，字段名称由 `properties` 的键表达；

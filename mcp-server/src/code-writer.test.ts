@@ -20,10 +20,12 @@ describe("codeWriterContext", () => {
     expect(serialized).not.toContain("complete_example");
   });
 
-  test("requires user domain when presenting the final script URL", () => {
+  test("uses the configured MCP base URL without asking for a user domain", () => {
     const context = codeWriterContext("script", "按用户需求创建接口");
-    expect(JSON.stringify(context)).toContain("用户提供的域名");
-    expect(JSON.stringify(context)).toContain("/flow/codeblock/{{脚本ID}}");
+    const serialized = JSON.stringify(context);
+    expect(serialized).toContain("FLOW_CODEBLOCK_BASE_URL");
+    expect(serialized).toContain("data.script_url");
+    expect(serialized).not.toContain("用户未提供域名时先询问");
   });
 
   test("distinguishes fixed objects from homogeneous dynamic dictionaries", () => {

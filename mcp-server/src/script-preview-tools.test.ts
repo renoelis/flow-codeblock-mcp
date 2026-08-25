@@ -14,6 +14,9 @@ const apiServer = Bun.serve({
       validationRequest = await request.json() as Record<string, unknown>;
       return Response.json({ success: true, data: { valid: true, warnings: [] } });
     }
+    if (request.method === "POST" && url.pathname === "/flow/scripts") {
+      return Response.json({ success: true, data: { script_id: "created-script", version: 1 } });
+    }
     if (request.method === "GET" && url.pathname.startsWith("/flow/scripts/")) {
       return Response.json({
         success: true,
@@ -144,6 +147,31 @@ describe("script preview tool", () => {
     expect(interfaceDoc.usage_refs).toBeUndefined();
     const properties = bodySchema.properties as Record<string, Record<string, unknown>>;
     expect(properties.storeInfo.example).toEqual({ id: "STORE-001" });
+  });
+
+  test("returns a script URL derived from FLOW_CODEBLOCK_BASE_URL after create", async () => {
+    const previewResponse = await client.callTool({
+      name: "flow_preview_script_change",
+      arguments: {
+        operation: "create",
+        code: "return { success: true };",
+        interface_doc: misplacedInterfaceDoc(),
+      },
+    });
+    expect(previewResponse.isError).not.toBe(true);
+    const previewContent = previewResponse.content.find((item) => item.type === "text");
+    if (!previewContent || previewContent.type !== "text") throw new Error("preview did not return text");
+    const preview = JSON.parse(previewContent.text) as Record<string, unknown>;
+
+    const applyResponse = await client.callTool({
+      name: "flow_apply_script_change",
+      arguments: { preview_id: preview.preview_id, confirm: true },
+    });
+    expect(applyResponse.isError).not.toBe(true);
+    const applyContent = applyResponse.content.find((item) => item.type === "text");
+    if (!applyContent || applyContent.type !== "text") throw new Error("apply did not return text");
+    const applied = JSON.parse(applyContent.text) as Record<string, Record<string, unknown>>;
+    expect(applied.data.script_url).toBe(`${apiServer.url.origin}/flow/codeblock/created-script`);
   });
 
   test("normalizes misplaced response schema keywords and null placeholders", async () => {
@@ -449,6 +477,10 @@ describe("script preview tool", () => {
           arguments: { preview_id: preview.preview_id, confirm: true },
         });
         expect(applyResponse.isError).not.toBe(true);
+        const applyContent = applyResponse.content.find((item) => item.type === "text");
+        if (!applyContent || applyContent.type !== "text") throw new Error("apply did not return text");
+        const applied = JSON.parse(applyContent.text) as Record<string, Record<string, unknown>>;
+        expect(applied.data.script_url).toBe(`${apiServer.url.origin}/flow/codeblock/${scriptId}`);
         expect(Object.prototype.hasOwnProperty.call(updateRequest, "ip_whitelist")).toBe(false);
       }
     }

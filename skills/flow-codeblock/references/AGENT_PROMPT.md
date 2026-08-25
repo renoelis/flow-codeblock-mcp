@@ -51,7 +51,7 @@
 
 - 文档必填 `schema_version/title/summary/endpoint/responses/logic_description`；无实际参数时 `request` 可省略，`usage_refs` 可省略。
 - `title` 是文档标题，`summary` 是一句话摘要，`logic_description` 必须说明输入、校验、处理步骤、外部调用、成功响应和错误分支。
-- `endpoint` 必填 `methods/description`；Web 页面录入时 `path` 可省略，MCP 创建时也可省略，更新时使用实际 `/flow/codeblock/{script_id}`；最终调用地址为用户提供的域名加 `/flow/codeblock/{{脚本ID}}`，用户未提供域名时先询问，不得猜测。
+- `endpoint` 必填 `methods/description`；Web 页面录入时 `path` 可省略，MCP 创建时也可省略，更新时使用实际 `/flow/codeblock/{script_id}`；最终调用地址固定为 MCP 环境变量 `FLOW_CODEBLOCK_BASE_URL + /flow/codeblock/{{脚本ID}}`，发布成功后直接使用 `flow_apply_script_change` 返回的 `data.script_url`，不要询问用户域名。
 - `endpoint.methods` 只能是 `GET`、`POST`。
 - 查询参数、请求头和请求体字段只有实际存在时才填写，并必须有名称、类型、描述和具体值；参数保留 `required` 表示运行时是否必填。
 - 需要描述 POST 请求体时填写 `content_type/schema/example`；每个响应必填 `status/description/content_type/schema/example`。

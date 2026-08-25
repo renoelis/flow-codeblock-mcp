@@ -203,7 +203,10 @@ describe("MCP tool metadata", () => {
       .toContain("误放在工具参数层");
     expect(byName.get("flow_preview_script_change")?.inputSchema.properties?.logic_description?.description)
       .toContain("误放在工具参数层");
-    expect(byName.get("flow_apply_script_change")?.description).toContain("用户提供的公网域名 + /flow/codeblock/");
+    expect(byName.get("flow_write_code")?.inputSchema.properties?.requirement?.description)
+      .toContain("script 模式无需询问调用域名");
+    expect(byName.get("flow_apply_script_change")?.description).toContain("FLOW_CODEBLOCK_BASE_URL + /flow/codeblock/");
+    expect(byName.get("flow_apply_script_change")?.description).toContain("data.script_url");
   });
 
   test("returns both authoritative files unchanged through the MCP transport", async () => {

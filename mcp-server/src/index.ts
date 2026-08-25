@@ -57,6 +57,24 @@ function jsonText(value: unknown): string {
   return JSON.stringify(redactTokenFields(value), null, 2);
 }
 
+function withScriptUrl(value: unknown, fallbackScriptId?: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const response = value as Record<string, unknown>;
+  if (!response.data || typeof response.data !== "object" || Array.isArray(response.data)) return value;
+  const data = response.data as Record<string, unknown>;
+  const scriptId = typeof data.script_id === "string" && data.script_id.length > 0
+    ? data.script_id
+    : fallbackScriptId;
+  if (typeof scriptId !== "string" || scriptId.length === 0) return value;
+  return {
+    ...response,
+    data: {
+      ...data,
+      script_url: `${baseUrl}/flow/codeblock/${encodeURIComponent(scriptId)}`,
+    },
+  };
+}
+
 function result(value: unknown) {
   return { content: [{ type: "text" as const, text: jsonText(value) }] };
 }
@@ -319,13 +337,14 @@ const serverInstructions = [
   "所有工具 JSON 出参会递归脱敏 token、access_token、authorization、refresh_token、qingcodeToken 等凭据字段；统计字段 token_cache、unique_tokens 不会被误处理。",
   "释放所有权时先调用 flow_request_script_owner_challenge(action=release)，再使用同一脚本、邮箱和验证码调用 flow_release_script_ownership；脚本必须已解锁。",
   "任何脚本变更都先调用 flow_preview_script_change；只有向用户展示预览且获得明确确认后，才调用 flow_apply_script_change。不得把用户要求预览或修改视为发布确认。",
+  "脚本发布成功后直接使用 flow_apply_script_change 返回的 data.script_url；该地址由 MCP 使用 FLOW_CODEBLOCK_BASE_URL 和脚本 ID 生成，不要询问用户公网域名。",
   "更新时只提交用户本次要求修改的字段；只改接口文档时省略 ip_whitelist。预览返回 ignored_changes 表示对应字段已从发布载荷移除，不会修改该字段，也无需因此重新预览。",
   "MCP 不提供删除工具。遇到删除请求必须拒绝调用其他工具替代删除，并告知用户通过 Flow Codeblock 网页或 REST DELETE /flow/scripts/{scriptId} 自行删除。",
   "读取当前版本后再更新；版本冲突、404、锁定、限流、配额或校验失败时根据错误处理，不要用反复试调用探测参数。",
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.24" },
+  { name: "flow-codeblock", version: "0.2.25" },
   { instructions: serverInstructions },
 );
 
@@ -340,7 +359,7 @@ server.registerTool(
         "生成模式。用户未说明时使用 non_script；non_script=即时执行且不保存。创建/更新持久脚本或要求 HTTP 重定向时必须使用 script，并生成独立接口文档。",
       ),
       requirement: z.string().min(1).max(20_000).describe(
-        "用户的完整业务需求、输入字段、预期输出、外部接口及边界条件。script 模式还应包含用户提供的公网调用域名；缺少时先询问，不能用 API 服务地址猜测。不要在这里放 access token。",
+        "用户的完整业务需求、输入字段、预期输出、外部接口及边界条件。script 模式无需询问调用域名；发布工具会使用 MCP 环境变量 FLOW_CODEBLOCK_BASE_URL 返回最终 script_url。不要在这里放 access token。",
       ),
       include_full_schema: z.boolean().optional().describe(
         "是否额外返回权威 script-interface-doc.schema.json 的完整对象。通常省略或 false 以节省 Token；需要逐字段构造复杂接口文档时设 true。",
@@ -803,7 +822,7 @@ server.registerTool(
   "flow_apply_script_change",
   {
     title: "确认发布脚本变更",
-    description: "脚本变更第 2 步：仅在 flow_preview_script_change 成功、已向用户展示预览且用户随后明确确认发布时调用。传同一 MCP 进程最近 10 分钟内返回的 preview_id 和字面量 confirm=true；会重新校验内容与 update 版本，过期、变化、404、锁定或 409 均拒绝，需重新读取并预览。成功后创建或原子更新脚本。创建成功后，最终地址必须写成用户提供的公网域名 + /flow/codeblock/{返回的脚本ID}；若用户未提供域名则先询问，不得使用 FLOW_CODEBLOCK_BASE_URL 猜测。本工具不能删除脚本，也不能把用户最初的创建/更新请求推定为发布确认。",
+    description: "脚本变更第 2 步：仅在 flow_preview_script_change 成功、已向用户展示预览且用户随后明确确认发布时调用。传同一 MCP 进程最近 10 分钟内返回的 preview_id 和字面量 confirm=true；会重新校验内容与 update 版本，过期、变化、404、锁定或 409 均拒绝，需重新读取并预览。成功后创建或原子更新脚本，并在 data.script_url 返回由 FLOW_CODEBLOCK_BASE_URL + /flow/codeblock/{script_id} 生成的最终调用地址，无需询问用户域名。本工具不能删除脚本，也不能把用户最初的创建/更新请求推定为发布确认。",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       preview_id: z.string().uuid().describe("flow_preview_script_change 成功响应中的 preview_id；10 分钟有效且仅限当前 MCP 进程。"),
@@ -831,7 +850,7 @@ server.registerTool(
           : body),
       });
       previewStore.delete(preview_id);
-      return result(response);
+      return result(withScriptUrl(response, preview.payload.script_id));
     } catch (error) {
       return apiError(error);
     }
