@@ -220,7 +220,43 @@ function purgePreviews(): void {
   }
 }
 
-async function assertUpdateTarget(scriptId: string, expectedVersion: number): Promise<void> {
+function currentIpWhitelist(script: Record<string, unknown>): unknown {
+  const versions = script.data;
+  const currentVersion = script.current_version;
+  if (!Array.isArray(versions)) return undefined;
+  const current = versions.find((version) => (
+    version !== null &&
+    typeof version === "object" &&
+    !Array.isArray(version) &&
+    (version as Record<string, unknown>).version === currentVersion
+  ));
+  if (
+    !current ||
+    !Object.prototype.hasOwnProperty.call(current, "ip_whitelist")
+  ) {
+    return undefined;
+  }
+  return (current as Record<string, unknown>).ip_whitelist;
+}
+
+function normalizeComparableIpWhitelist(value: unknown): string[] | undefined {
+  if (value === null) return [];
+  if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) {
+    return undefined;
+  }
+  return value;
+}
+
+function ipWhitelistsEqual(current: unknown, submitted: unknown): boolean {
+  const currentEntries = normalizeComparableIpWhitelist(current);
+  const submittedEntries = normalizeComparableIpWhitelist(submitted);
+  return currentEntries !== undefined &&
+    submittedEntries !== undefined &&
+    currentEntries.length === submittedEntries.length &&
+    currentEntries.every((entry, index) => entry === submittedEntries[index]);
+}
+
+async function assertUpdateTarget(scriptId: string, expectedVersion: number): Promise<Record<string, unknown>> {
   const response = await apiRequest(`/flow/scripts/${encodeURIComponent(scriptId)}`);
   if (!response || typeof response !== "object" || Array.isArray(response)) {
     throw new Error("Flow-codeblock API returned an invalid script detail response");
@@ -229,7 +265,8 @@ async function assertUpdateTarget(scriptId: string, expectedVersion: number): Pr
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Flow-codeblock API returned an invalid script detail response");
   }
-  const currentVersion = (data as Record<string, unknown>).current_version;
+  const script = data as Record<string, unknown>;
+  const currentVersion = script.current_version;
   if (typeof currentVersion !== "number" || !Number.isInteger(currentVersion) || currentVersion <= 0) {
     throw new Error("Flow-codeblock API returned an invalid current script version");
   }
@@ -247,6 +284,7 @@ async function assertUpdateTarget(scriptId: string, expectedVersion: number): Pr
       },
     });
   }
+  return script;
 }
 
 async function revalidatePreview(
@@ -281,12 +319,13 @@ const serverInstructions = [
   "所有工具 JSON 出参会递归脱敏 token、access_token、authorization、refresh_token、qingcodeToken 等凭据字段；统计字段 token_cache、unique_tokens 不会被误处理。",
   "释放所有权时先调用 flow_request_script_owner_challenge(action=release)，再使用同一脚本、邮箱和验证码调用 flow_release_script_ownership；脚本必须已解锁。",
   "任何脚本变更都先调用 flow_preview_script_change；只有向用户展示预览且获得明确确认后，才调用 flow_apply_script_change。不得把用户要求预览或修改视为发布确认。",
+  "更新时只提交用户本次要求修改的字段；只改接口文档时省略 ip_whitelist。预览返回 ignored_changes 表示对应字段已从发布载荷移除，不会修改该字段，也无需因此重新预览。",
   "MCP 不提供删除工具。遇到删除请求必须拒绝调用其他工具替代删除，并告知用户通过 Flow Codeblock 网页或 REST DELETE /flow/scripts/{scriptId} 自行删除。",
   "读取当前版本后再更新；版本冲突、404、锁定、限流、配额或校验失败时根据错误处理，不要用反复试调用探测参数。",
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.20" },
+  { name: "flow-codeblock", version: "0.2.21" },
   { instructions: serverInstructions },
 );
 
@@ -612,7 +651,7 @@ const changeSchema = {
     "脚本列表展示名称/描述。创建时用户未指定则概括为 15 个字符以内；用户明确指定较长名称时不要擅自截断。单独修改 description 不生成新版本。",
   ),
   ip_whitelist: z.array(z.string()).nullable().optional().describe(
-    "允许调用脚本的 IP/CIDR 列表。省略=保持原值（创建时使用服务端默认）；null 或 []=清除限制；非空数组=设置白名单。单独修改不生成新版本。",
+    "仅在用户明确要求修改白名单时提交。允许调用脚本的 IP/CIDR 列表；省略=保持原值（创建时使用服务端默认），null 或 []=清除限制，非空数组=设置白名单。只改接口文档时必须省略；单独修改不生成新版本。",
   ),
   interface_doc: interfaceDocToolInputSchema.optional(),
   responses: z.unknown().optional().describe(
@@ -630,7 +669,7 @@ server.registerTool(
   "flow_preview_script_change",
   {
     title: "预览并校验脚本变更",
-    description: "任何脚本创建或更新的必经第 1 步，不写数据库、不扣执行配额，返回 10 分钟有效的 preview_id。若本轮还没有脚本代码与文档契约，先调用 flow_write_code(mode=script)，再一次性自检代码和完整 interface_doc，避免依靠重复预览逐项修错。MCP 会先纠正 interface_doc 中可无歧义识别的常见位置错误，并在 interface_doc_normalizations 中返回修正记录；仍有错误时必须保留原文档，仅修正错误列表中的路径，不得重写或删除其他字段。create：必须带 code/code_base64 和 interface_doc，不带 script_id/expected_version；description 未指定时建议不超过 15 个字符。update：先 flow_get_script 读取当前版本，必须带 script_id、expected_version 和至少一个变更；代码变化必须同时带完整文档，文档或代码变化生成新版本，仅 description/IP 变化不生成版本；ip_whitelist=null 或 [] 表示清除。更新会先校验脚本存在且版本未变。预览成功后先向用户展示结果，不能自动发布。MCP 不支持删除。",
+    description: "任何脚本创建或更新的必经第 1 步，不写数据库、不扣执行配额，返回 10 分钟有效的 preview_id。若本轮还没有脚本代码与文档契约，先调用 flow_write_code(mode=script)，再一次性自检代码和完整 interface_doc，避免依靠重复预览逐项修错。MCP 会先纠正 interface_doc 中可无歧义识别的常见位置错误，并在 interface_doc_normalizations 中返回修正记录；仍有错误时必须保留原文档，仅修正错误列表中的路径，不得重写或删除其他字段。create：必须带 code/code_base64 和 interface_doc，不带 script_id/expected_version；description 未指定时建议不超过 15 个字符。update：先 flow_get_script 读取当前版本，必须带 script_id、expected_version 和至少一个变更；只提交本次确实要修改的字段，只改接口文档时必须省略 ip_whitelist；代码变化必须同时带完整文档，文档或代码变化生成新版本，仅 description/IP 变化不生成版本；ip_whitelist=null 或 [] 表示清除，与当前值相同的白名单会从更新中忽略并通过 ignored_changes 说明。ignored_changes 中的字段不会进入发布载荷，无需因此重新预览。更新会先校验脚本存在且版本未变。预览成功后先向用户展示结果，不能自动发布。MCP 不支持删除。",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: changeSchema,
   },
@@ -694,52 +733,63 @@ server.registerTool(
         }
         throw error;
       }
-      if (preparedInput.operation === "update") {
-        await assertUpdateTarget(preparedInput.script_id!, preparedInput.expected_version!);
+      const effectiveInput = { ...preparedInput };
+      const ignoredChanges: string[] = [];
+      if (effectiveInput.operation === "update") {
+        const currentScript = await assertUpdateTarget(effectiveInput.script_id!, effectiveInput.expected_version!);
+        if (
+          effectiveInput.ip_whitelist !== undefined &&
+          ipWhitelistsEqual(currentIpWhitelist(currentScript), effectiveInput.ip_whitelist)
+        ) {
+          delete effectiveInput.ip_whitelist;
+          ignoredChanges.push("ip_whitelist 与当前值相同，已从本次变更中省略");
+          assertScriptChangeInput(effectiveInput);
+        }
       }
-      const hasCode = preparedInput.code !== undefined || preparedInput.code_base64 !== undefined;
-      const codeBase64 = hasCode ? encodeCode(preparedInput.code, preparedInput.code_base64) : undefined;
-      const validation = hasCode || preparedInput.interface_doc !== undefined || preparedInput.ip_whitelist !== undefined
+      const hasCode = effectiveInput.code !== undefined || effectiveInput.code_base64 !== undefined;
+      const codeBase64 = hasCode ? encodeCode(effectiveInput.code, effectiveInput.code_base64) : undefined;
+      const validation = hasCode || effectiveInput.interface_doc !== undefined || effectiveInput.ip_whitelist !== undefined
         ? await apiRequest("/flow/scripts/validate", {
             method: "POST",
             body: JSON.stringify({
               ...(codeBase64 !== undefined ? { code_base64: codeBase64 } : {}),
-              ...(preparedInput.operation === "update" ? { script_id: preparedInput.script_id } : {}),
-              ...(preparedInput.ip_whitelist !== undefined ? { ip_whitelist: preparedInput.ip_whitelist } : {}),
-              ...(preparedInput.interface_doc !== undefined ? { interface_doc: preparedInput.interface_doc } : {}),
+              ...(effectiveInput.operation === "update" ? { script_id: effectiveInput.script_id } : {}),
+              ...(effectiveInput.ip_whitelist !== undefined ? { ip_whitelist: effectiveInput.ip_whitelist } : {}),
+              ...(effectiveInput.interface_doc !== undefined ? { interface_doc: effectiveInput.interface_doc } : {}),
             }),
           })
         : { valid: true, warnings: [], message: "未提交代码或接口文档，仅更新描述/IP 白名单" };
       const payload: Record<string, unknown> = {
-        ...(preparedInput.operation === "update" ? { script_id: preparedInput.script_id, expected_version: preparedInput.expected_version } : {}),
+        ...(effectiveInput.operation === "update" ? { script_id: effectiveInput.script_id, expected_version: effectiveInput.expected_version } : {}),
         ...(codeBase64 !== undefined ? { code_base64: codeBase64 } : {}),
-        ...(preparedInput.description !== undefined ? { description: preparedInput.description } : {}),
-        ...(preparedInput.ip_whitelist !== undefined ? { ip_whitelist: preparedInput.ip_whitelist } : {}),
-        ...(preparedInput.interface_doc !== undefined ? { interface_doc: preparedInput.interface_doc } : {}),
+        ...(effectiveInput.description !== undefined ? { description: effectiveInput.description } : {}),
+        ...(effectiveInput.ip_whitelist !== undefined ? { ip_whitelist: effectiveInput.ip_whitelist } : {}),
+        ...(effectiveInput.interface_doc !== undefined ? { interface_doc: effectiveInput.interface_doc } : {}),
       };
       const previewId = randomUUID();
-      const storedPayload = preparedInput.operation === "create" && preparedInput.interface_doc !== undefined
-        ? { ...payload, interface_doc: removeCreatePath(preparedInput.interface_doc) }
+      const storedPayload = effectiveInput.operation === "create" && effectiveInput.interface_doc !== undefined
+        ? { ...payload, interface_doc: removeCreatePath(effectiveInput.interface_doc) }
         : payload;
       const preview = {
         preview_id: previewId,
-        operation: preparedInput.operation,
+        operation: effectiveInput.operation,
         expires_at: new Date(Date.now() + previewTtlMs).toISOString(),
         validation,
         ...(interfaceDocNormalization.changes.length > 0
           ? { interface_doc_normalizations: interfaceDocNormalization.changes }
           : {}),
+        ...(ignoredChanges.length > 0 ? { ignored_changes: ignoredChanges } : {}),
         changes: {
-          code: codeBase64 === undefined ? false : preparedInput.code !== undefined ? "provided" : "base64 provided",
-          description: preparedInput.description !== undefined,
-          ip_whitelist: preparedInput.ip_whitelist !== undefined,
-          interface_doc: preparedInput.interface_doc !== undefined,
+          code: codeBase64 === undefined ? false : effectiveInput.code !== undefined ? "provided" : "base64 provided",
+          description: effectiveInput.description !== undefined,
+          ip_whitelist: effectiveInput.ip_whitelist !== undefined,
+          interface_doc: effectiveInput.interface_doc !== undefined,
         },
       };
       previewStore.set(previewId, {
         expiresAt: Date.now() + previewTtlMs,
-        fingerprint: fingerprint(preparedInput.operation, storedPayload),
-        operation: preparedInput.operation,
+        fingerprint: fingerprint(effectiveInput.operation, storedPayload),
+        operation: effectiveInput.operation,
         payload: storedPayload,
       });
       return result(preview);

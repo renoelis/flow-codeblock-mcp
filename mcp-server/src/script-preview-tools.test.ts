@@ -1,8 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 let validationRequest: Record<string, unknown> | undefined;
+let updateRequest: Record<string, unknown> | undefined;
+let currentIpWhitelist: string[] | null = null;
 const apiServer = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -11,6 +13,19 @@ const apiServer = Bun.serve({
     if (request.method === "POST" && url.pathname === "/flow/scripts/validate") {
       validationRequest = await request.json() as Record<string, unknown>;
       return Response.json({ success: true, data: { valid: true, warnings: [] } });
+    }
+    if (request.method === "GET" && url.pathname.startsWith("/flow/scripts/")) {
+      return Response.json({
+        success: true,
+        data: {
+          current_version: 1,
+          data: [{ version: 1, ip_whitelist: currentIpWhitelist }],
+        },
+      });
+    }
+    if (request.method === "PUT" && url.pathname.startsWith("/flow/scripts/")) {
+      updateRequest = await request.json() as Record<string, unknown>;
+      return Response.json({ success: true, data: { updated: true } });
     }
     return Response.json({ success: false }, { status: 404 });
   },
@@ -72,8 +87,20 @@ function misplacedInterfaceDoc() {
   };
 }
 
+function updateInterfaceDoc(scriptId: string) {
+  const document = misplacedInterfaceDoc();
+  (document.endpoint as Record<string, unknown>).path = `/flow/codeblock/${scriptId}`;
+  return document;
+}
+
 beforeAll(async () => {
   await client.connect(transport);
+});
+
+beforeEach(() => {
+  validationRequest = undefined;
+  updateRequest = undefined;
+  currentIpWhitelist = null;
 });
 
 afterAll(async () => {
@@ -275,5 +302,58 @@ describe("script preview tool", () => {
     const content = response.content.find((item) => item.type === "text");
     if (!content || content.type !== "text") throw new Error("preview error did not return text");
     expect(content.text).toContain("不能替代 interface_doc");
+  });
+
+  test("omits unchanged whitelist values from interface document updates", async () => {
+    const scenarios: Array<{
+      current: string[] | null;
+      submitted: string[] | null;
+      changed: boolean;
+    }> = [
+      { current: null, submitted: null, changed: false },
+      { current: null, submitted: [], changed: false },
+      { current: ["203.0.113.10"], submitted: ["203.0.113.10"], changed: false },
+      { current: ["203.0.113.10"], submitted: null, changed: true },
+      { current: ["203.0.113.10"], submitted: ["203.0.113.20"], changed: true },
+    ];
+
+    for (const [index, scenario] of scenarios.entries()) {
+      const scriptId = `script-update-${index}`;
+      currentIpWhitelist = scenario.current;
+      validationRequest = undefined;
+      const response = await client.callTool({
+        name: "flow_preview_script_change",
+        arguments: {
+          operation: "update",
+          script_id: scriptId,
+          expected_version: 1,
+          interface_doc: updateInterfaceDoc(scriptId),
+          ip_whitelist: scenario.submitted,
+        },
+      });
+
+      expect(response.isError).not.toBe(true);
+      const content = response.content.find((item) => item.type === "text");
+      if (!content || content.type !== "text") throw new Error("preview did not return text");
+      const preview = JSON.parse(content.text) as Record<string, unknown>;
+      const changes = preview.changes as Record<string, unknown>;
+      expect(changes.ip_whitelist).toBe(scenario.changed);
+      expect(Object.prototype.hasOwnProperty.call(validationRequest, "ip_whitelist")).toBe(scenario.changed);
+      if (scenario.changed) {
+        expect(validationRequest?.ip_whitelist).toEqual(scenario.submitted);
+        expect(preview.ignored_changes).toBeUndefined();
+      } else {
+        expect(preview.ignored_changes).toEqual(["ip_whitelist 与当前值相同，已从本次变更中省略"]);
+      }
+
+      if (index === 0) {
+        const applyResponse = await client.callTool({
+          name: "flow_apply_script_change",
+          arguments: { preview_id: preview.preview_id, confirm: true },
+        });
+        expect(applyResponse.isError).not.toBe(true);
+        expect(Object.prototype.hasOwnProperty.call(updateRequest, "ip_whitelist")).toBe(false);
+      }
+    }
   });
 });

@@ -130,6 +130,9 @@ describe("MCP tool metadata", () => {
     expect(byName.get("flow_preview_script_change")?.description).toContain("ip_whitelist=null 或 [] 表示清除");
     expect(byName.get("flow_preview_script_change")?.description).toContain("interface_doc_normalizations");
     expect(byName.get("flow_preview_script_change")?.description).toContain("保留原文档");
+    expect(byName.get("flow_preview_script_change")?.description).toContain("无需因此重新预览");
+    expect(byName.get("flow_preview_script_change")?.inputSchema.properties?.ip_whitelist?.description)
+      .toContain("只改接口文档时必须省略");
     expect(byName.get("flow_apply_script_change")?.description).toContain("用户随后明确确认发布");
     expect(byName.get("flow_request_script_owner_challenge")?.inputSchema.properties?.action)
       .toMatchObject({ enum: ["lock", "unlock", "release"] });
