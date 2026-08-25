@@ -138,4 +138,83 @@ describe("interfaceDocCompletenessIssues", () => {
     const issues = interfaceDocCompletenessIssues(document, "create");
     expect(issues).toContain("interface_doc.request.body.example 缺少 required 字段 optionalNote");
   });
+
+  test("removes string usage notes and copies examples between snake and camel aliases", () => {
+    const document = completePostDocument();
+    const properties = document.request.body.schema.properties as Record<string, unknown>;
+    properties.store_info = {
+      type: "object",
+      description: "蛇形门店信息",
+      example: { id: "STORE-001" },
+      additionalProperties: field("string", "门店字段值", "STORE-001"),
+    };
+    properties.storeInfo = {
+      type: "object",
+      description: "驼峰门店信息",
+      additionalProperties: field("string", "门店字段值", "STORE-001"),
+    };
+    (document as Record<string, unknown>).usage_refs = ["普通安全说明不属于应用引用"];
+
+    const normalized = normalizeInterfaceDocument(document);
+    expect(normalized.changes).toContain(
+      "interface_doc.usage_refs 已移除 1 个非对象条目；普通说明应写入 logic_description",
+    );
+    expect(normalized.changes).toContain(
+      "interface_doc.request.body.schema.properties.storeInfo.example 已从别名 interface_doc.request.body.schema.properties.store_info.example 补全",
+    );
+    expect((normalized.document as Record<string, unknown>).usage_refs).toBeUndefined();
+    expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
+  });
+
+  test("validates structured usage references before calling the API", () => {
+    const document = completePostDocument();
+    (document as Record<string, unknown>).usage_refs = [{ note: "缺少应用名称", unsupported: true }];
+    const issues = interfaceDocCompletenessIssues(document, "create");
+    expect(issues).toContain("interface_doc.usage_refs[0].app_name 必须是至少 1 个字符的非空字符串");
+    expect(issues).toContain("interface_doc.usage_refs[0].unsupported 不是支持的字段");
+  });
+
+  test("normalizes nested examples independently of property order", () => {
+    const document = completePostDocument();
+    const properties = document.request.body.schema.properties as Record<string, unknown>;
+    properties.settleInfo = {
+      type: "object",
+      description: "驼峰结算信息",
+      additionalProperties: { type: "boolean", description: "结算字段值" },
+    };
+    properties.settle_info = {
+      type: "object",
+      description: "蛇形结算信息",
+      additionalProperties: { type: "boolean", description: "结算字段值" },
+    };
+    properties.rows = {
+      type: "array",
+      description: "结算信息列表",
+      example: [{ profitSharing: false }],
+      items: {
+        type: "object",
+        description: "单条结算信息",
+        properties: {
+          profitSharing: { type: "boolean", description: "是否分账" },
+        },
+        required: ["profitSharing"],
+      },
+    };
+    document.request.body.example = {
+      queryText: "待处理内容",
+      settle_info: { profit_sharing: false },
+    };
+
+    const normalized = normalizeInterfaceDocument(document);
+    const normalizedDocument = normalized.document as typeof document;
+    const normalizedProperties = normalizedDocument.request.body.schema.properties as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(normalizedProperties.settleInfo.example).toEqual({ profit_sharing: false });
+    expect(normalizedProperties.settle_info.example).toEqual({ profit_sharing: false });
+    expect((normalizedProperties.settleInfo.additionalProperties as Record<string, unknown>).example).toBe(false);
+    expect((normalizedProperties.rows.items as Record<string, unknown>).example).toEqual({ profitSharing: false });
+    expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
+  });
 });

@@ -1,6 +1,6 @@
 {
   "name": "flow-codeblock-mcp",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "description": "Flow Codeblock stdio MCP Server and Codex Skill for JavaScript execution and script management.",
   "type": "module",
   "bin": {

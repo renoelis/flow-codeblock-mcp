@@ -62,13 +62,13 @@
 - JSON Schema 的 `required` 只写运行时真正必填的业务字段；成功和错误结构不同应拆成不同响应。
 - `logic_description` 必须具体说明请求字段、校验、处理步骤、是否调用外部接口、成功响应和错误分支。
 - 文档面向调用方，只写查询参数、请求头、请求体和 Cookie；不得出现 `input.query`、`input.header`、`input.body`、`input.cookies` 等内部结构。调用方 POST 业务 JSON 直接放请求体，不包装为 `input`。
-- `usage_refs` 可省略，仅有真实应用引用时填写。
+- `usage_refs` 可省略，仅有真实应用引用时填写 `{app_name,app_id?,location?,note?}` 对象数组；安全提示和普通说明写入 `logic_description`，不得把字符串数组放入 `usage_refs`。
 - JSON 代码块只能包含合法 JSON 对象，不得混入 Markdown、注释或尾随逗号。
 - 不提供预置业务示例；所有 `example` 值必须来自当前需求和代码实际行为。文档、代码和工具参数中不得出现真实 Token、密码、Cookie、Authorization 值或验证码。
 
 调用预览前必须按上述规则递归自检一次请求和所有响应；不要依靠重复调用预览工具逐项发现缺失字段。
 
-规范结构中，请求体和每个响应的完整 `example` 与 `schema` 同级，`properties/required/items/additionalProperties` 放在 `schema` 内。MCP 会在预览前兼容纠正这两类无歧义的位置错误；预览成功时通过 `interface_doc_normalizations` 返回修正记录，仍有错误时在错误文本的“本次已自动规范化”中返回。保留原文档和所有未报错字段，只修正错误列表中的准确路径；不要重写整份文档，也不要删除已有的 `responses`、`logic_description` 或 `request`。
+规范结构中，请求体和每个响应的完整 `example` 与 `schema` 同级，`properties/required/items/additionalProperties` 放在 `schema` 内。MCP 会在预览前兼容纠正这两类无歧义的位置错误，从父级示例或同名蛇形/驼峰别名补全可推导的节点示例，并移除 `usage_refs` 中无效的非对象条目；预览成功时通过 `interface_doc_normalizations` 返回修正记录，仍有错误时在错误文本的“本次已自动规范化”中返回。保留原文档和所有未报错字段，只修正错误列表中的准确路径；不要重写整份文档，也不要删除已有的 `responses`、`logic_description` 或 `request`。
 
 ## 原生能力和模块
 

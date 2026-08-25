@@ -20,12 +20,13 @@ export const interfaceDocNestedRules = [
 
 export const interfaceDocRepairRules = [
   "保留原 interface_doc 中未报错的字段，只修正错误列表指出的路径；不要为了修复单个字段而重写或删减 responses、logic_description 或 request。",
-  "规范结构中 request.body 和每个 response 的 example 与 schema 同级；properties、required、items、additionalProperties 属于 schema。MCP 会兼容纠正这些字段的常见错位，并在预览结果中列出 interface_doc_normalizations。",
+  "规范结构中 request.body 和每个 response 的 example 与 schema 同级；properties、required、items、additionalProperties 属于 schema。MCP 会兼容纠正常见错位、从父级或同名蛇形/驼峰别名补全可推导的节点 example，并移除 usage_refs 中无效的非对象说明。",
 ];
 
 export const interfaceDocInputDescription = [
   "创建和代码更新时必填完整 script-interface-doc.v1；只改 description/ip_whitelist 时可省略。",
   "字段位置：根对象包含 schema_version='script-interface-doc.v1'、title、summary、endpoint、request?、responses、logic_description、usage_refs?；endpoint={methods,path?,description}；request={query?,headers?,body?}；query/headers 为 parameter 数组；body={content_type='application/json',schema,example}；responses 的每项={status,description,content_type='application/json',schema,example}。",
+  "usage_refs 仅用于真实应用引用，每项必须是 {app_name,app_id?,location?,note?} 对象；普通说明写入 logic_description，不能把字符串数组放入 usage_refs。",
   `必填结构：${Object.entries(interfaceDocRequiredFields).map(([key, fields]) => `${key}=[${fields.join(",")}]`).join("；")}。`,
   ...interfaceDocRepairRules,
   ...interfaceDocNestedRules,
@@ -40,6 +41,89 @@ function hasOwn(object: JsonObject, key: string): boolean {
 }
 
 const schemaPlacementKeys = ["properties", "required", "items", "additionalProperties"] as const;
+
+function comparableFieldName(name: string): string {
+  return name.replace(/_/g, "").toLowerCase();
+}
+
+function normalizeSchemaNodeExamples(
+  schema: JsonObject,
+  example: unknown,
+  path: string,
+  changes: string[],
+): void {
+  if (schema.type === "array" && isObject(schema.items)) {
+    if (!hasOwn(schema.items, "example") && Array.isArray(example) && example.length > 0) {
+      schema.items.example = structuredClone(example[0]);
+      changes.push(`${path}.items.example 已从数组示例首项补全`);
+    }
+    normalizeSchemaNodeExamples(schema.items, schema.items.example, `${path}.items`, changes);
+    return;
+  }
+
+  if (schema.type !== "object") return;
+  const properties = isObject(schema.properties) ? schema.properties : undefined;
+  const objectExample = isObject(example) ? example : undefined;
+  if (properties) {
+    const entries = Object.entries(properties);
+
+    for (const [key, propertySchema] of entries) {
+      if (
+        isObject(propertySchema) &&
+        !hasOwn(propertySchema, "example") &&
+        objectExample &&
+        hasOwn(objectExample, key)
+      ) {
+        propertySchema.example = structuredClone(objectExample[key]);
+        changes.push(`${path}.properties.${key}.example 已从父级示例补全`);
+      }
+    }
+
+    // Resolve aliases only after every property has had a chance to use the parent example.
+    for (const [key, propertySchema] of entries) {
+      if (!isObject(propertySchema)) continue;
+      if (!hasOwn(propertySchema, "example")) {
+        const alias = entries.find(([candidateKey, candidateSchema]) => (
+          candidateKey !== key &&
+          comparableFieldName(candidateKey) === comparableFieldName(key) &&
+          isObject(candidateSchema) &&
+          hasOwn(candidateSchema, "example")
+        ));
+        if (alias && isObject(alias[1])) {
+          propertySchema.example = structuredClone(alias[1].example);
+          changes.push(`${path}.properties.${key}.example 已从别名 ${path}.properties.${alias[0]}.example 补全`);
+        }
+      }
+    }
+
+    for (const [key, propertySchema] of entries) {
+      if (!isObject(propertySchema)) continue;
+      normalizeSchemaNodeExamples(
+        propertySchema,
+        propertySchema.example,
+        `${path}.properties.${key}`,
+        changes,
+      );
+    }
+  }
+
+  if (isObject(schema.additionalProperties)) {
+    const knownKeys = new Set(properties ? Object.keys(properties) : []);
+    const dynamicExample = objectExample
+      ? Object.entries(objectExample).find(([key]) => !knownKeys.has(key))?.[1]
+      : undefined;
+    if (!hasOwn(schema.additionalProperties, "example") && dynamicExample !== undefined) {
+      schema.additionalProperties.example = structuredClone(dynamicExample);
+      changes.push(`${path}.additionalProperties.example 已从动态字段示例补全`);
+    }
+    normalizeSchemaNodeExamples(
+      schema.additionalProperties,
+      schema.additionalProperties.example,
+      `${path}.additionalProperties`,
+      changes,
+    );
+  }
+}
 
 function normalizeSchemaContainer(container: JsonObject, path: string, changes: string[]): void {
   if (!isObject(container.schema)) return;
@@ -56,6 +140,23 @@ function normalizeSchemaContainer(container: JsonObject, path: string, changes: 
     container.example = structuredClone(container.schema.example);
     changes.push(`${path}.example 已从 ${path}.schema.example 提升`);
   }
+  normalizeSchemaNodeExamples(container.schema, container.example, `${path}.schema`, changes);
+}
+
+function normalizeUsageRefs(document: JsonObject, changes: string[]): void {
+  if (!Array.isArray(document.usage_refs)) return;
+  const validRefs = document.usage_refs.filter(isObject);
+  const removedCount = document.usage_refs.length - validRefs.length;
+  if (removedCount === 0) return;
+
+  if (validRefs.length === 0) {
+    delete document.usage_refs;
+  } else {
+    document.usage_refs = validRefs;
+  }
+  changes.push(
+    `interface_doc.usage_refs 已移除 ${removedCount} 个非对象条目；普通说明应写入 logic_description`,
+  );
 }
 
 export function normalizeInterfaceDocument(document: unknown): { document: unknown; changes: string[] } {
@@ -63,6 +164,7 @@ export function normalizeInterfaceDocument(document: unknown): { document: unkno
 
   const normalized = structuredClone(document) as JsonObject;
   const changes: string[] = [];
+  normalizeUsageRefs(normalized, changes);
   if (isObject(normalized.request) && isObject(normalized.request.body)) {
     normalizeSchemaContainer(normalized.request.body, "interface_doc.request.body", changes);
   }
@@ -229,6 +331,35 @@ function validateParameters(value: unknown, path: string, issues: string[]): voi
   });
 }
 
+function validateUsageRefs(value: unknown, issues: string[]): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    issues.push("interface_doc.usage_refs 如填写必须是对象数组");
+    return;
+  }
+  if (value.length > 100) {
+    issues.push("interface_doc.usage_refs 最多填写 100 项");
+  }
+  value.forEach((usageRef, index) => {
+    const path = `interface_doc.usage_refs[${index}]`;
+    if (!isObject(usageRef)) {
+      issues.push(`${path} 必须是对象`);
+      return;
+    }
+    requireText(usageRef, "app_name", path, issues);
+    for (const key of ["app_id", "location", "note"]) {
+      if (usageRef[key] !== undefined && typeof usageRef[key] !== "string") {
+        issues.push(`${path}.${key} 如填写必须是字符串`);
+      }
+    }
+    for (const key of Object.keys(usageRef)) {
+      if (!["app_id", "app_name", "location", "note"].includes(key)) {
+        issues.push(`${path}.${key} 不是支持的字段`);
+      }
+    }
+  });
+}
+
 function rejectInternalInputTerms(value: unknown, path: string, issues: string[]): void {
   if (typeof value === "string") {
     if (/\binput\.(?:query|header|body|cookies)\b/i.test(value)) {
@@ -262,6 +393,7 @@ export function interfaceDocCompletenessIssues(
   requireText(document, "title", "interface_doc", issues);
   requireText(document, "summary", "interface_doc", issues);
   requireText(document, "logic_description", "interface_doc", issues, 20);
+  validateUsageRefs(document.usage_refs, issues);
 
   let methods: unknown[] = [];
   if (!isObject(document.endpoint)) {

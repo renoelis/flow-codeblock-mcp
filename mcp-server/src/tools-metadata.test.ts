@@ -131,6 +131,7 @@ describe("MCP tool metadata", () => {
       | { description?: string }
       | undefined;
     expect(interfaceDoc?.description).toContain("logic_description");
+    expect(interfaceDoc?.description).toContain("usage_refs 仅用于真实应用引用");
     expect(interfaceDoc?.description).toContain("request={query?,headers?,body?}");
     expect(interfaceDoc?.description).toContain("请求体或响应体的根 Schema 节点必须填写 type");
     expect(interfaceDoc?.description).toContain("items 本身必须填写 type、description 和 example");

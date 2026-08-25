@@ -40,6 +40,17 @@ function misplacedInterfaceDoc() {
         schema: { type: "object", example: { name: "示例名称" } },
         properties: {
           name: { type: "string", description: "待校验名称", example: "示例名称" },
+          store_info: {
+            type: "object",
+            description: "蛇形门店信息",
+            example: { id: "STORE-001" },
+            additionalProperties: { type: "string", description: "门店字段值", example: "STORE-001" },
+          },
+          storeInfo: {
+            type: "object",
+            description: "驼峰门店信息",
+            additionalProperties: { type: "string", description: "门店字段值", example: "STORE-001" },
+          },
         },
         required: ["name"],
       },
@@ -57,6 +68,7 @@ function misplacedInterfaceDoc() {
       },
     }],
     logic_description: "读取并校验请求中的名称字段，不调用外部服务，成功时返回成功状态，失败时返回错误信息。",
+    usage_refs: ["普通说明不属于应用引用"],
   };
 }
 
@@ -85,9 +97,11 @@ describe("script preview tool", () => {
     if (!content || content.type !== "text") throw new Error("preview did not return text");
     const preview = JSON.parse(content.text) as Record<string, unknown>;
     expect(preview.interface_doc_normalizations).toEqual([
+      "interface_doc.usage_refs 已移除 1 个非对象条目；普通说明应写入 logic_description",
       "interface_doc.request.body.properties 已移入 interface_doc.request.body.schema.properties",
       "interface_doc.request.body.required 已移入 interface_doc.request.body.schema.required",
       "interface_doc.request.body.example 已从 interface_doc.request.body.schema.example 提升",
+      "interface_doc.request.body.schema.properties.storeInfo.example 已从别名 interface_doc.request.body.schema.properties.store_info.example 补全",
       "interface_doc.responses[0].example 已从 interface_doc.responses[0].schema.example 提升",
     ]);
 
@@ -100,6 +114,9 @@ describe("script preview tool", () => {
     expect(bodySchema.required).toEqual(["name"]);
     expect(body.example).toEqual({ name: "示例名称" });
     expect(responses[0].example).toEqual({ success: true });
+    expect(interfaceDoc.usage_refs).toBeUndefined();
+    const properties = bodySchema.properties as Record<string, Record<string, unknown>>;
+    expect(properties.storeInfo.example).toEqual({ id: "STORE-001" });
   });
 
   test("reports applied normalizations when other document errors remain", async () => {
