@@ -37,7 +37,7 @@ MCP 所有工具的 JSON 出参都会递归脱敏 `token`、`access_token`、`au
 创建或更新代码的流程：
 
 1. 生成代码和完整接口文档；更新前先用 `flow_get_script` 读取当前版本，只传 `script_id`。
-2. 调用 `flow_preview_script_change`。创建不带 `script_id`；更新带 `script_id` 和 `expected_version`。更新预览会先确认脚本存在且版本未变化；404 或版本冲突时停止并重新读取，不得继续发布。
+2. 调用 `flow_preview_script_change`。建议显式传 `operation`；创建不带 `script_id`，更新带 `script_id` 和 `expected_version`。MCP 会兼容漏传 `operation`：没有 `script_id` 时推断为 `create`，有 `script_id` 时推断为 `update`，并通过 `input_normalizations` 说明。更新预览会先确认脚本存在且版本未变化；404 或版本冲突时停止并重新读取，不得继续发布。
 3. 展示预览结果。只有用户明确确认后，才调用 `flow_apply_script_change`，传 `preview_id` 和 `confirm: true`。
 4. 创建成功后调用 `flow_execute_script`，其 `body` 参数直接传业务 JSON，报告执行和配额结果。
 

@@ -353,7 +353,7 @@ const serverInstructions = [
   "flow_get_script 和 flow_get_script_version 会把脚本详情中的 code_base64 解码为 UTF-8 code 返回；严格解码失败时保留原始 code_base64。",
   "所有工具 JSON 出参会递归脱敏 token、access_token、authorization、refresh_token、qingcodeToken 等凭据字段；统计字段 token_cache、unique_tokens 不会被误处理。",
   "释放所有权时先调用 flow_request_script_owner_challenge(action=release)，再使用同一脚本、邮箱和验证码调用 flow_release_script_ownership；脚本必须已解锁。",
-  "任何脚本变更都先调用 flow_preview_script_change；只有工具成功返回 preview_id 才能声称预览通过。isError=true、-32602 或没有 preview_id 都必须明确报告失败；只有向用户展示成功预览且获得明确确认后，才调用 flow_apply_script_change。不得把用户要求预览或修改视为发布确认。",
+  "任何脚本变更都先调用 flow_preview_script_change；operation 建议显式传入，漏传时 MCP 根据 script_id 是否存在推断 create/update 并返回 input_normalizations。只有工具成功返回 preview_id 才能声称预览通过。isError=true、-32602 或没有 preview_id 都必须明确报告失败；只有向用户展示成功预览且获得明确确认后，才调用 flow_apply_script_change。不得把用户要求预览或修改视为发布确认。",
   "脚本发布成功后直接使用 flow_apply_script_change 返回的 data.script_url；该地址由 MCP 使用 FLOW_CODEBLOCK_BASE_URL 和脚本 ID 生成，不要询问用户公网域名。",
   "更新时只提交用户本次要求修改的字段；只改接口文档时省略 ip_whitelist。预览返回 ignored_changes 表示对应字段已从发布载荷移除，不会修改该字段，也无需因此重新预览。",
   "MCP 不提供删除工具。遇到删除请求必须拒绝调用其他工具替代删除，并告知用户通过 Flow Codeblock 网页或 REST DELETE /flow/scripts/{scriptId} 自行删除。",
@@ -361,7 +361,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.26" },
+  { name: "flow-codeblock", version: "0.2.27" },
   { instructions: serverInstructions },
 );
 
@@ -676,8 +676,8 @@ server.registerTool(
 );
 
 const changeSchema = {
-  operation: z.enum(["create", "update"]).describe(
-    "create=创建新脚本；update=修改现有脚本。create 必须带 code/code_base64 和完整 interface_doc，且不得带 script_id/expected_version；update 必须带 script_id/expected_version。",
+  operation: z.enum(["create", "update"]).optional().describe(
+    "建议显式传入：create=创建新脚本，update=修改现有脚本。省略时 MCP 根据 script_id 推断：未提供 script_id=create，已提供 script_id=update。create 必须带 code/code_base64 和完整 interface_doc，且不得带 script_id/expected_version；update 必须带 script_id/expected_version。",
   ),
   script_id: z.string().min(1).optional().describe("仅 update 必填；目标脚本 ID。create 时必须省略。"),
   code: z.string().min(1).optional().describe(
@@ -708,7 +708,7 @@ server.registerTool(
   "flow_preview_script_change",
   {
     title: "预览并校验脚本变更",
-    description: "任何脚本创建或更新的必经第 1 步，不写数据库、不扣执行配额，返回 10 分钟有效的 preview_id。若本轮还没有脚本代码与文档契约，先调用 flow_write_code(mode=script)，再一次性自检代码和完整 interface_doc，避免依靠重复预览逐项修错。MCP 会先纠正 interface_doc 中可无歧义识别的常见位置错误，并在 interface_doc_normalizations 中返回修正记录；仍有错误时必须保留原文档，仅修正错误列表中的路径，不得重写或删除其他字段。create：必须带 code/code_base64 和 interface_doc，不带 script_id/expected_version；description 未指定时建议不超过 15 个字符。update：先 flow_get_script 读取当前版本，必须带 script_id、expected_version 和至少一个变更；只提交本次确实要修改的字段，只改接口文档时必须省略 ip_whitelist；代码变化必须同时带完整文档，文档或代码变化生成新版本，仅 description/IP 变化不生成版本；ip_whitelist=null 或 [] 表示清除，与当前值相同的白名单会从更新中忽略并通过 ignored_changes 说明。ignored_changes 中的字段不会进入发布载荷，无需因此重新预览。更新会先校验脚本存在且版本未变。预览成功后先向用户展示结果，不能自动发布。MCP 不支持删除。",
+    description: "任何脚本创建或更新的必经第 1 步，不写数据库、不扣执行配额，返回 10 分钟有效的 preview_id。若本轮还没有脚本代码与文档契约，先调用 flow_write_code(mode=script)，再一次性自检代码和完整 interface_doc，避免依靠重复预览逐项修错。operation 建议显式传入；漏传时 MCP 会按 script_id 是否存在推断 create/update，并通过 input_normalizations 说明。MCP 会先纠正 interface_doc 中可无歧义识别的常见位置错误，并在 interface_doc_normalizations 中返回修正记录；仍有错误时必须保留原文档，仅修正错误列表中的路径，不得重写或删除其他字段。create：必须带 code/code_base64 和 interface_doc，不带 script_id/expected_version；description 未指定时建议不超过 15 个字符。update：先 flow_get_script 读取当前版本，必须带 script_id、expected_version 和至少一个变更；只提交本次确实要修改的字段，只改接口文档时必须省略 ip_whitelist；代码变化必须同时带完整文档，文档或代码变化生成新版本，仅 description/IP 变化不生成版本；ip_whitelist=null 或 [] 表示清除，与当前值相同的白名单会从更新中忽略并通过 ignored_changes 说明。ignored_changes 中的字段不会进入发布载荷，无需因此重新预览。更新会先校验脚本存在且版本未变。预览成功后先向用户展示结果，不能自动发布。MCP 不支持删除。",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: changeSchema,
   },
@@ -718,9 +718,19 @@ server.registerTool(
       const {
         responses: misplacedResponses,
         logic_description: misplacedLogicDescription,
-        ...changeInput
+        operation: requestedOperation,
+        ...rawChangeInput
       } = input;
       const inputNormalizations: string[] = [];
+      const inferredOperation = requestedOperation ?? (rawChangeInput.script_id === undefined ? "create" : "update");
+      const changeInput = { ...rawChangeInput, operation: inferredOperation };
+      if (requestedOperation === undefined) {
+        inputNormalizations.push(
+          rawChangeInput.script_id === undefined
+            ? "未传 operation，因未提供 script_id 已推断为 create"
+            : "未传 operation，因提供了 script_id 已推断为 update",
+        );
+      }
       if (changeInput.operation === "create" && changeInput.expected_version === 0) {
         delete changeInput.expected_version;
         inputNormalizations.push("create 操作误传的 expected_version=0 已忽略；该字段仅用于 update");

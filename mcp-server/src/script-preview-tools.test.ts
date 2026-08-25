@@ -204,6 +204,46 @@ describe("script preview tool", () => {
     expect(createRequest).not.toHaveProperty("expected_version");
   });
 
+  test("infers create when operation and script_id are both omitted", async () => {
+    const response = await client.callTool({
+      name: "flow_preview_script_change",
+      arguments: {
+        code: "return { success: true };",
+        interface_doc: misplacedInterfaceDoc(),
+      },
+    });
+
+    expect(response.isError).not.toBe(true);
+    const content = response.content.find((item) => item.type === "text");
+    if (!content || content.type !== "text") throw new Error("preview did not return text");
+    const preview = JSON.parse(content.text) as Record<string, unknown>;
+    expect(preview.operation).toBe("create");
+    expect(preview.input_normalizations).toEqual([
+      "未传 operation，因未提供 script_id 已推断为 create",
+    ]);
+  });
+
+  test("infers update when operation is omitted and script_id is present", async () => {
+    const scriptId = "inferred-update";
+    const response = await client.callTool({
+      name: "flow_preview_script_change",
+      arguments: {
+        script_id: scriptId,
+        expected_version: 1,
+        interface_doc: updateInterfaceDoc(scriptId),
+      },
+    });
+
+    expect(response.isError).not.toBe(true);
+    const content = response.content.find((item) => item.type === "text");
+    if (!content || content.type !== "text") throw new Error("preview did not return text");
+    const preview = JSON.parse(content.text) as Record<string, unknown>;
+    expect(preview.operation).toBe("update");
+    expect(preview.input_normalizations).toEqual([
+      "未传 operation，因提供了 script_id 已推断为 update",
+    ]);
+  });
+
   test("rejects server environment access before API validation", async () => {
     for (const code of [
       "return process.env.BAIDU_MAP_AK;",

@@ -70,7 +70,7 @@
 
 调用预览前必须按上述规则递归自检一次请求和所有响应；不要依靠重复调用预览工具逐项发现缺失字段。
 
-只有 `flow_preview_script_change` 成功返回 `preview_id` 才能向用户说明预览已通过；`isError=true`、`-32602` 或没有 `preview_id` 均表示预览失败，必须先修正。创建时省略 `expected_version`；MCP 仅为兼容模型常见误传而自动忽略 `expected_version=0`。
+只有 `flow_preview_script_change` 成功返回 `preview_id` 才能向用户说明预览已通过；`isError=true`、`-32602` 或没有 `preview_id` 均表示预览失败，必须先修正。建议显式传 `operation`；MCP 会兼容漏传该字段，没有 `script_id` 时推断为 `create`，有 `script_id` 时推断为 `update`，并通过 `input_normalizations` 说明。创建时省略 `expected_version`；MCP 仅为兼容模型常见误传而自动忽略 `expected_version=0`。
 
 `interface_doc` 根对象只放 `schema_version/title/summary/endpoint/request/responses/logic_description/usage_refs`；`request` 只放 `query/headers/body`；`ip_whitelist` 是 `flow_preview_script_change` 的工具参数，不放进 `interface_doc`。`responses/logic_description` 必须放在 `interface_doc` 根对象内；请求体和每个响应的完整 `example` 与 `schema` 同级，`request.example` 应写成 `request.body.example`，`properties/required/items/additionalProperties` 放在 `schema` 内。MCP 会在预览前兼容纠正这些无歧义的位置错误，从父级示例或同名蛇形/驼峰别名补全可推导的节点示例，并移除 `usage_refs` 中无效的非对象条目；预览成功时通过 `interface_doc_normalizations` 返回修正记录，仍有错误时在错误文本的“本次已自动规范化”中返回。保留原文档和所有未报错字段，只修正错误列表中的准确路径；不要重写整份文档，也不要删除已有的 `responses`、`logic_description` 或 `request`。
 

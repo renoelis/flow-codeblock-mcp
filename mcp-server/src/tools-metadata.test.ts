@@ -55,6 +55,7 @@ describe("MCP tool metadata", () => {
     expect(instructions).toContain("不得猜测 version");
     expect(instructions).toContain("flow_release_script_ownership");
     expect(instructions).toContain("只有工具成功返回 preview_id");
+    expect(instructions).toContain("漏传时 MCP 根据 script_id 是否存在推断 create/update");
     expect(instructions).toContain("禁止读取 process.env");
     expect(tools.map((tool) => tool.name).sort()).toEqual(expectedToolNames);
     expect(tools.some((tool) => tool.name.includes("delete"))).toBe(false);
@@ -136,6 +137,10 @@ describe("MCP tool metadata", () => {
     expect(byName.get("flow_preview_script_change")?.description).toContain("interface_doc_normalizations");
     expect(byName.get("flow_preview_script_change")?.description).toContain("保留原文档");
     expect(byName.get("flow_preview_script_change")?.description).toContain("无需因此重新预览");
+    expect(byName.get("flow_preview_script_change")?.description).toContain("漏传时 MCP 会按 script_id 是否存在推断");
+    expect(byName.get("flow_preview_script_change")?.inputSchema.required ?? []).not.toContain("operation");
+    expect(byName.get("flow_preview_script_change")?.inputSchema.properties?.operation?.description)
+      .toContain("未提供 script_id=create，已提供 script_id=update");
     expect(byName.get("flow_preview_script_change")?.inputSchema.properties?.ip_whitelist?.description)
       .toContain("只改接口文档时必须省略");
     expect(byName.get("flow_apply_script_change")?.description).toContain("用户随后明确确认发布");
