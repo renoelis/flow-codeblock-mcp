@@ -12,6 +12,13 @@ const configuredBaseUrl = process.env.FLOW_CODEBLOCK_BASE_URL?.trim();
 const accessToken = process.env.FLOW_CODEBLOCK_TOKEN?.trim();
 const previewTtlMs = 10 * 60 * 1000;
 const requestTimeoutMs = 30_000;
+const openAiCompatibleEmailPattern =
+  /^[A-Za-z0-9_'+-]+(?:\.[A-Za-z0-9_'+-]+)*@(?:[A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
+
+function emailInput(description: string) {
+  // Zod's default email regex uses lookahead, which OpenAI Responses tool schemas reject.
+  return z.email({ pattern: openAiCompatibleEmailPattern }).describe(description);
+}
 
 if (!configuredBaseUrl) {
   throw new Error("FLOW_CODEBLOCK_BASE_URL is required; configure https://qingcode.oalite.com or an explicit local Flow Codeblock API URL");
@@ -198,7 +205,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.6" },
+  { name: "flow-codeblock", version: "0.2.9" },
   { instructions: serverInstructions },
 );
 
@@ -283,7 +290,9 @@ server.registerTool(
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       script_id: z.string().min(1).describe("目标脚本 ID；来自 flow_list_scripts、创建结果或用户明确提供的 ID。"),
-      version: z.number().int().positive().optional().describe("可选历史版本号。准备更新时必须省略，以读取当前版本。"),
+      version: z.number().int().positive().optional().describe(
+        "可选，默认省略。省略时查询脚本当前版本；仅在需要查看指定历史版本时传入对应版本号。准备更新时必须省略，并使用响应中的 current_version 作为 expected_version。",
+      ),
     },
   },
   async ({ script_id, version }) => {
@@ -326,7 +335,7 @@ server.registerTool(
     inputSchema: {
       script_id: z.string().min(1).describe("要锁定或解锁的脚本 ID。"),
       action: z.enum(["lock", "unlock"]).describe("验证码用途；必须与下一步调用的 lock 或 unlock 工具一致。"),
-      email: z.string().email().describe("接收验证码的所有者邮箱；下一步必须原样使用。"),
+      email: emailInput("接收验证码的所有者邮箱；下一步必须原样使用。"),
     },
   },
   async ({ script_id, action, email }) => {
@@ -349,7 +358,7 @@ server.registerTool(
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       script_id: z.string().min(1).describe("申请 lock 验证码时使用的同一脚本 ID。"),
-      email: z.string().email().describe("申请 lock 验证码时使用的同一邮箱。"),
+      email: emailInput("申请 lock 验证码时使用的同一邮箱。"),
       code: z.string().min(1).describe("邮箱收到的一次性 lock 验证码，不是 JavaScript 代码。"),
       owner_name: z.string().trim().min(1).max(100).describe("脚本所有者显示名称，去除首尾空白后 1-100 个字符。"),
     },
@@ -374,7 +383,7 @@ server.registerTool(
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     inputSchema: {
       script_id: z.string().min(1).describe("申请 unlock 验证码时使用的同一脚本 ID。"),
-      email: z.string().email().describe("申请 unlock 验证码时使用的同一所有者邮箱。"),
+      email: emailInput("申请 unlock 验证码时使用的同一所有者邮箱。"),
       code: z.string().min(1).describe("邮箱收到的一次性 unlock 验证码。"),
     },
   },
@@ -398,8 +407,8 @@ server.registerTool(
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     inputSchema: {
       script_id: z.string().min(1).describe("要转移所有权的脚本 ID。"),
-      authorizer_email: z.string().email().describe("当前所有者邮箱或创建该脚本的 Token 登记邮箱，仅用于授权校验。"),
-      new_owner_email: z.string().email().describe("新所有者邮箱；验证码将发送到这里，确认步骤必须使用同一邮箱。"),
+      authorizer_email: emailInput("当前所有者邮箱或创建该脚本的 Token 登记邮箱，仅用于授权校验。"),
+      new_owner_email: emailInput("新所有者邮箱；验证码将发送到这里，确认步骤必须使用同一邮箱。"),
       new_owner_name: z.string().trim().min(1).max(100).describe("新所有者显示名称，去除首尾空白后 1-100 个字符。"),
     },
   },
@@ -424,7 +433,7 @@ server.registerTool(
     inputSchema: {
       script_id: z.string().min(1).describe("发起转移时使用的同一脚本 ID。"),
       transfer_id: z.string().min(1).describe("flow_start_ownership_transfer 成功响应返回的不透明 transfer_id。"),
-      email: z.string().email().describe("发起转移时的 new_owner_email，必须完全相同。"),
+      email: emailInput("发起转移时的 new_owner_email，必须完全相同。"),
       code: z.string().min(1).describe("新所有者邮箱收到的一次性转移验证码。"),
     },
   },

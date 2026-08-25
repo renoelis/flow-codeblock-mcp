@@ -81,4 +81,25 @@ describe("interfaceDocCompletenessIssues", () => {
     expect(issues.some((issue) => issue.includes("properties.success.description"))).toBe(true);
     expect(issues.some((issue) => issue.includes("properties.success.example"))).toBe(true);
   });
+
+  test("requires description and example on array items", () => {
+    const document = completePostDocument();
+    document.responses[0].schema.properties.values = {
+      type: "array",
+      description: "结果值列表",
+      example: [1],
+      items: { type: "integer" },
+    };
+    document.responses[0].example.values = [1];
+    const incompleteIssues = interfaceDocCompletenessIssues(document, "create");
+    expect(incompleteIssues.some((issue) => issue.includes("properties.values.items.description"))).toBe(true);
+    expect(incompleteIssues.some((issue) => issue.includes("properties.values.items.example"))).toBe(true);
+
+    document.responses[0].schema.properties.values.items = {
+      type: "integer",
+      description: "单个结果值",
+      example: 1,
+    };
+    expect(interfaceDocCompletenessIssues(document, "create")).toEqual([]);
+  });
 });

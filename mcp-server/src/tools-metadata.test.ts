@@ -68,6 +68,37 @@ describe("MCP tool metadata", () => {
     }
   });
 
+  test("publishes OpenAI-compatible email patterns", () => {
+    const byName = new Map(tools.map((tool) => [tool.name, tool]));
+    const emailArguments = [
+      ["flow_request_script_owner_challenge", "email"],
+      ["flow_lock_script", "email"],
+      ["flow_unlock_script", "email"],
+      ["flow_start_ownership_transfer", "authorizer_email"],
+      ["flow_start_ownership_transfer", "new_owner_email"],
+      ["flow_confirm_ownership_transfer", "email"],
+    ] as const;
+
+    for (const [toolName, argumentName] of emailArguments) {
+      const schema = byName.get(toolName)?.inputSchema.properties?.[argumentName] as
+        | { format?: string; pattern?: string }
+        | undefined;
+      expect(schema?.format, `${toolName}.${argumentName} format`).toBe("email");
+      expect(schema?.pattern, `${toolName}.${argumentName} pattern`).toBeDefined();
+      for (const unsupported of ["(?=", "(?!", "(?<=", "(?<!", "*?", "+?", "??"]) {
+        expect(
+          schema!.pattern!.includes(unsupported),
+          `${toolName}.${argumentName} unsupported regex token ${unsupported}`,
+        ).toBe(false);
+      }
+
+      const pattern = new RegExp(schema!.pattern!);
+      expect(pattern.test("owner.name+flow@example.com"), `${toolName}.${argumentName} valid email`).toBe(true);
+      expect(pattern.test(".owner@example.com"), `${toolName}.${argumentName} leading dot`).toBe(false);
+      expect(pattern.test("owner..name@example.com"), `${toolName}.${argumentName} repeated dot`).toBe(false);
+    }
+  });
+
   test("distinguishes both code input models and locks the preview/apply workflow", () => {
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     expect(byName.get("flow_write_code")?.description).toContain("AGENT_PROMPT.md 权威规则原文");
@@ -78,12 +109,21 @@ describe("MCP tool metadata", () => {
     expect(byName.get("flow_preview_script_change")?.description).toContain("ip_whitelist=null 或 [] 表示清除");
     expect(byName.get("flow_apply_script_change")?.description).toContain("用户随后明确确认发布");
 
+    const getScriptVersion = byName.get("flow_get_script")?.inputSchema.properties?.version as
+      | { description?: string }
+      | undefined;
+    expect(getScriptVersion?.description).toContain("可选，默认省略");
+    expect(getScriptVersion?.description).toContain("省略时查询脚本当前版本");
+    expect(getScriptVersion?.description).toContain("仅在需要查看指定历史版本时传入");
+    expect(getScriptVersion?.description).toContain("current_version 作为 expected_version");
+
     const interfaceDoc = byName.get("flow_preview_script_change")?.inputSchema.properties?.interface_doc as
       | { description?: string }
       | undefined;
     expect(interfaceDoc?.description).toContain("logic_description");
     expect(interfaceDoc?.description).toContain("request={query?,headers?,body?}");
-    expect(interfaceDoc?.description).toContain("每个实际字段节点还必须填写 description 和 example");
+    expect(interfaceDoc?.description).toContain("请求体或响应体的根 Schema 节点必须填写 type");
+    expect(interfaceDoc?.description).toContain("items 本身必须填写 type、description 和 example");
     expect(byName.get("flow_apply_script_change")?.description).toContain("用户提供的公网域名 + /flow/codeblock/");
   });
 

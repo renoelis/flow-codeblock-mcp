@@ -11,9 +11,9 @@ export const interfaceDocRequiredFields = {
 };
 
 export const interfaceDocNestedRules = [
-  "每个请求体或响应体 Schema 节点都必须填写 type；每个实际字段节点还必须填写 description 和 example。",
+  "请求体或响应体的根 Schema 节点必须填写 type；其所有嵌套 Schema 节点（包括 properties 字段、array.items 和 additionalProperties 的值 Schema）都必须填写 type、description 和 example。",
   "固定字段对象必须有 properties，并为每个字段填写名称、type、description、example；动态键字典必须用 additionalProperties 描述完整的值 Schema；二者不能同时缺失。",
-  "每个 type=array 都必须有 items；items.type=object 时必须有完整 items.properties。数组 example 中的每个对象都必须覆盖 items.properties 的全部字段。",
+  "每个 type=array 都必须有 items，且 items 本身必须填写 type、description 和 example；items.type=object 时还必须有完整 items.properties。数组 example 中的每个对象都必须覆盖 items.properties 的全部字段。",
   "任意层级 properties 与对应 example 字段必须双向一致；properties 中的字段即使运行时可选，也必须出现在完整 example 中。",
   "JSON Schema 的 required 只表示运行时真正必填的业务字段；成功和错误结构不同应拆成不同 responses。",
 ];

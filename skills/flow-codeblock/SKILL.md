@@ -54,8 +54,8 @@ MCP 预览使用严格完整性门禁。文档必须与代码行为一致，并�
 
 嵌套 Schema 和示例必须先自行递归检查一次，通过后再调用预览；不得依靠连续预览逐项发现缺失字段：
 
-- 每个 Schema 节点写 `type`；每个实际字段节点再写 `description/example`；固定字段对象必须有完整 `properties`；动态键字典可使用 `additionalProperties` 描述完整的值 Schema；二者不能同时缺失；
-- 每个 `type: "array"` 必须有 `items`；对象数组必须有完整 `items.properties`；
+- 请求体或响应体的根 Schema 节点必须填写 `type`；其所有嵌套 Schema 节点（包括 `properties` 字段、数组的 `items`、`additionalProperties` 值 Schema）都必须填写 `type/description/example`；固定字段对象必须有完整 `properties`；动态键字典可使用 `additionalProperties` 描述完整的值 Schema；二者不能同时缺失；
+- 每个 `type: "array"` 必须有 `items`，且 `items` 本身也必须填写 `type/description/example`；对象数组还必须有完整 `items.properties`；
 - 数组值中的每个对象都必须包含 `items.properties` 的全部字段；
 - 任意层级 `properties` 与对应值双向一致；即使字段未列入 `required`，也必须出现在完整值中；
 - JSON Schema 的 `required` 只声明运行时真正必填的业务字段；成功、错误结构不同应拆成不同 `responses`。

@@ -56,8 +56,8 @@
 - 查询参数、请求头和请求体字段只有实际存在时才填写，并必须有名称、类型、描述和具体值；参数保留 `required` 表示运行时是否必填。
 - 需要描述 POST 请求体时填写 `content_type/schema/example`；每个响应必填 `status/description/content_type/schema/example`。
 - 响应 Schema 中每个字段必须填写 `type/description/example`；字段名称由 `properties` 的键表达。
-- 每个 Schema 节点写 `type`，字段节点再写 `description/example`；固定字段对象必须有完整 `properties`；动态键字典必须用 `additionalProperties` 描述值 Schema。
-- 每个数组必须有 `items`；对象数组必须有完整 `items.properties`，数组值中的每个对象必须覆盖全部字段。
+- 请求体或响应体的根 Schema 节点必须填写 `type`；其所有嵌套 Schema 节点（包括 `properties` 字段、数组的 `items`、`additionalProperties` 值 Schema）都必须填写 `type/description/example`；固定字段对象必须有完整 `properties`；动态键字典必须用 `additionalProperties` 描述值 Schema。
+- 每个数组必须有 `items`，且 `items` 本身也必须填写 `type/description/example`；`items.type=object` 时还必须有完整 `items.properties`，数组值中的每个对象必须覆盖全部字段。
 - 请求体和响应体任意层级的 `properties` 与对应值必须双向完全一致；运行时可选字段也必须出现在完整值中。
 - JSON Schema 的 `required` 只写运行时真正必填的业务字段；成功和错误结构不同应拆成不同响应。
 - `logic_description` 必须具体说明请求字段、校验、处理步骤、是否调用外部接口、成功响应和错误分支。
