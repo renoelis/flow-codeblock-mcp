@@ -45,11 +45,11 @@ description: 使用 Flow Codeblock MCP 工具写出非脚本代码或创建、�
 
 ## 接口文档
 
-MCP 预览使用严格完整性门禁。文档必须与代码行为一致，并包含：
+MCP 预览与 Flow Codeblock 页面、Rust 文档接口使用同一套必填契约；示例不是可选提示字段。文档必须与代码行为一致，并包含：
 
 - 文档必填：`schema_version/title/summary/endpoint/responses/logic_description`；没有实际参数时 `request` 可省略；`usage_refs` 始终可省略，仅有真实应用引用时填写 `{app_name,app_id?,location?,note?}` 对象数组，普通说明写入 `logic_description`；
 - `title` 是文档标题，`summary` 是一句话摘要，`logic_description` 必须具体说明输入、校验、处理步骤、外部调用、成功响应和错误分支；
-- `endpoint` 必填 `methods/description`；`methods` 只能是 `GET`、`POST`；`path` 创建时可省略，更新时必填实际路径；最终调用地址是用户提供的域名加 `/flow/codeblock/{{脚本ID}}`，用户未提供域名时先询问，不得猜测；
+- `endpoint` 必填 `methods/description`；`methods` 只能是 `GET`、`POST`；Web 页面录入时 `path` 可省略，MCP 创建时也可省略，更新时必填实际路径；最终调用地址是用户提供的域名加 `/flow/codeblock/{{脚本ID}}`，用户未提供域名时先询问，不得猜测；
 - 查询参数、请求头和请求体字段只有实际存在时才填写，并且必须提供名称、类型、描述和具体值；参数对象同时保留 `required` 表示运行时是否必填；需要描述 POST 请求体时填写 `content_type/schema/example`；
 - 每个响应必填 `status/description/content_type/schema/example`；
 - 响应 Schema 中每个字段必须填写 `type/description/example`，字段名称由 `properties` 的键表达；
@@ -65,7 +65,7 @@ MCP 预览使用严格完整性门禁。文档必须与代码行为一致，并�
 
 `interface_doc` 根对象只放 `schema_version/title/summary/endpoint/request/responses/logic_description/usage_refs`；`request` 只放 `query/headers/body`；`ip_whitelist` 是 `flow_preview_script_change` 的工具参数，不放进 `interface_doc`。`responses/logic_description` 必须放在 `interface_doc` 根对象内；请求体和每个响应的完整 `example` 与 `schema` 同级，`request.example` 应写成 `request.body.example`，`properties/required/items/additionalProperties` 放在 `schema` 内。MCP 会在预览前兼容纠正这些无歧义的位置错误，从父级示例或同名蛇形/驼峰别名补全可推导的节点示例，并移除 `usage_refs` 中无效的非对象条目；预览成功时通过 `interface_doc_normalizations` 返回修正记录，仍有错误时在错误文本的“本次已自动规范化”中返回。必须保留原文档及所有未报错字段，只修正错误列表中的准确路径；不得重写整份文档或删除 `responses`、`logic_description`、`request`。
 
-文档面向调用方，说明文字不得出现 `input.query/input.header/input.body/input.cookies`。创建时 `endpoint.path` 可省略；更新文档时填写实际脚本路径。不要提供预置业务示例，所有 `example` 值必须来自当前需求和代码实际行为。
+文档面向调用方，说明文字不得出现 `input.query/input.header/input.body/input.cookies`。Web 页面录入和 MCP 创建时 `endpoint.path` 可省略；更新文档时填写实际脚本路径。不要提供预置业务示例，所有 `example` 值必须来自当前需求和代码实际行为。
 
 ## 所有权
 

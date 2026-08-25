@@ -628,10 +628,21 @@ curl -X POST http://localhost:3002/flow/scripts \
     "ip_whitelist": ["127.0.0.1/32"],
     "interface_doc": {
       "schema_version": "script-interface-doc.v1",
-      "title": "sum demo",
-      "endpoint": {"methods": ["POST"]},
-      "request": {"query": [], "headers": [], "body": {"schema": {"type": "object"}}},
-      "responses": [{"status": 200, "description": "成功", "schema": {"type": "object"}}]
+      "title": "求和接口",
+      "summary": "接收两个数字并返回它们的和",
+      "endpoint": {"methods": ["POST"], "description": "校验两个数字并返回求和结果"},
+      "request": {"query": [], "headers": [], "body": {
+        "content_type": "application/json",
+        "schema": {"type": "object", "properties": {
+          "a": {"type": "number", "description": "第一个加数", "example": 1},
+          "b": {"type": "number", "description": "第二个加数", "example": 2}
+        }},
+        "example": {"a": 1, "b": 2}
+      }},
+      "responses": [{"status": 200, "description": "求和成功", "content_type": "application/json", "schema": {"type": "object", "properties": {
+        "sum": {"type": "number", "description": "两个数字的和", "example": 3}
+      }}, "example": {"sum": 3}}],
+      "logic_description": "读取并校验 a、b 两个数字，执行加法计算后返回 sum；参数缺失或类型错误时返回明确的业务错误响应。"
     }
   }'
 ```
@@ -642,7 +653,7 @@ curl -X POST http://localhost:3002/flow/scripts/validate \
   -H 'Content-Type: application/json' -H 'accessToken: <TOKEN>' \
   -d '{
     "code_base64": "Y29uc3Qge2EsIGJ9ID0gaW5wdXQ7IHJldHVybiB7c3VtOiBhICsgYn07",
-    "interface_doc": {"schema_version":"script-interface-doc.v1","endpoint":{"methods":["POST"]}}
+    "interface_doc": {"schema_version":"script-interface-doc.v1","title":"健康检查","summary":"返回服务当前状态","endpoint":{"methods":["GET"],"description":"读取并返回服务健康状态"},"responses":[{"status":200,"description":"服务正常","content_type":"application/json","schema":{"type":"object"},"example":{}}],"logic_description":"读取服务运行状态并返回健康检查结果；服务异常时返回对应的错误响应。"}
   }'
 ```
 
@@ -685,14 +696,14 @@ curl -X POST http://localhost:3002/flow/tokens \
 只校验和规范化，不写数据库。请求支持以下两种形式：
 
 ```json
-{"document": {"schema_version": "script-interface-doc.v1", "endpoint": {"methods": ["POST"]}}}
+{"document":{"schema_version":"script-interface-doc.v1","title":"健康检查","summary":"返回服务当前状态","endpoint":{"methods":["GET"],"description":"读取并返回服务健康状态"},"responses":[{"status":200,"description":"服务正常","content_type":"application/json","schema":{"type":"object"},"example":{}}],"logic_description":"读取服务运行状态并返回健康检查结果；服务异常时返回对应的错误响应。"}}
 ```
 
 ```json
 {"raw_document": "{\"openapi\":\"3.0.3\",\"paths\":{...}}", "format": "json"}
 ```
 
-只接受 JSON，不接受 YAML；服务端会固定路径为 `/flow/codeblock/{script_id}`，方法只允许 `GET`/`POST`，并固定按 `GET`、`POST` 顺序规范化。仅含 `GET` 时不保存 `request.body`，包含 `POST` 时请求体和响应体 `Content-Type` 固定为 `application/json`。同一位置参数不能重复，最多 100 个查询参数、100 个请求头、50 个响应和 100 个应用引用，规范化文档最大 256 KiB。响应会返回 `data.document` 和敏感字段 `warnings`。
+只接受 JSON，不接受 YAML；`title`、`summary`、`logic_description`、`endpoint.methods`、`endpoint.description` 和至少一个响应必填。查询参数、请求头的 `name/type/required/description/example` 必填；请求体和响应体的 `content_type/schema/example` 必填，Schema 根节点必须有 `type`，嵌套字段节点必须有 `type/description/example`。Web 页面录入时 `endpoint.path` 可以省略；MCP 创建时也可以省略，更新时填写实际脚本路径。Flow Codeblock API 会根据请求 URL 中的当前脚本 ID 生成 `/flow/codeblock/{script_id}`，不会用传入 path 覆盖系统路径。方法只允许 `GET`/`POST`，并固定按 `GET`、`POST` 顺序规范化。仅含 `GET` 时不保存 `request.body`，包含 `POST` 时请求体和响应体 `Content-Type` 固定为 `application/json`。同一位置参数不能重复，最多 100 个查询参数、100 个请求头、50 个响应和 100 个应用引用，规范化文档最大 256 KiB。响应会返回 `data.document` 和敏感字段 `warnings`。
 
 ### `PUT /flow/scripts/{script_id}/documentation`
 
@@ -703,5 +714,5 @@ curl -X POST http://localhost:3002/flow/tokens \
 ```bash
 curl -X PUT 'http://localhost:3002/flow/scripts/demo12345678901234567890/documentation' \
   -H 'Content-Type: application/json' -H 'accessToken: <TOKEN>' \
-  -d '{"document":{"schema_version":"script-interface-doc.v1","title":"客户查询","endpoint":{"methods":["GET"]},"request":{"query":[{"name":"customer_id","required":true,"description":"客户编号","example":"C10001"}],"headers":[]},"responses":[{"status":200,"description":"成功","schema":{}}]}}'
+  -d '{"document":{"schema_version":"script-interface-doc.v1","title":"客户查询","summary":"根据客户编号查询客户信息","endpoint":{"methods":["GET"],"description":"校验客户编号并查询客户资料"},"request":{"query":[{"name":"customer_id","type":"string","required":true,"description":"客户编号","example":"C10001"}],"headers":[]},"responses":[{"status":200,"description":"查询成功","content_type":"application/json","schema":{"type":"object"},"example":{}}],"logic_description":"校验客户编号后查询客户资料，成功时返回客户信息；客户不存在或参数无效时返回明确错误响应。"}}'
 ```

@@ -16,7 +16,7 @@
       "additionalProperties": false,
       "properties": {
         "methods": {"type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true, "items": {"enum": ["GET", "POST"]}},
-        "path": {"type": "string", "pattern": "^/flow/codeblock/", "description": "创建时可省略；更新时填写实际脚本路径。最终调用地址为用户提供的域名加 /flow/codeblock/{{脚本ID}}。"},
+        "path": {"type": "string", "pattern": "^/flow/codeblock/", "description": "Web 页面录入时可省略；MCP 创建时可省略，更新时填写实际脚本路径。最终调用地址为用户提供的域名加 /flow/codeblock/{{脚本ID}}。"},
         "description": {"type": "string", "minLength": 1, "maxLength": 4000}
       }
     },

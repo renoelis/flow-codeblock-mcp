@@ -207,7 +207,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.17" },
+  { name: "flow-codeblock", version: "0.2.18" },
   { instructions: serverInstructions },
 );
 

@@ -47,11 +47,11 @@
 
 ## 脚本接口文档
 
-脚本模式必须把接口契约作为独立 JSON 对象输出，并通过 `interface_doc` 提交。不得使用 JavaScript 注释承载方法、路径、参数、响应、认证或接口说明。JSON 必须符合 `script-interface-doc.v1`；MCP 预览还会执行下列完整性门禁：
+脚本模式必须把接口契约作为独立 JSON 对象输出，并通过 `interface_doc` 提交。不得使用 JavaScript 注释承载方法、路径、参数、响应、认证或接口说明。JSON 必须符合 `script-interface-doc.v1`；这些必填规则与 Flow Codeblock 页面、Rust 文档接口一致，示例不是可选提示字段。MCP 预览还会执行下列完整性门禁：
 
 - 文档必填 `schema_version/title/summary/endpoint/responses/logic_description`；无实际参数时 `request` 可省略，`usage_refs` 可省略。
 - `title` 是文档标题，`summary` 是一句话摘要，`logic_description` 必须说明输入、校验、处理步骤、外部调用、成功响应和错误分支。
-- `endpoint` 必填 `methods/description`；`path` 创建时可省略，更新时使用实际 `/flow/codeblock/{script_id}`；最终调用地址为用户提供的域名加 `/flow/codeblock/{{脚本ID}}`，用户未提供域名时先询问，不得猜测。
+- `endpoint` 必填 `methods/description`；Web 页面录入时 `path` 可省略，MCP 创建时也可省略，更新时使用实际 `/flow/codeblock/{script_id}`；最终调用地址为用户提供的域名加 `/flow/codeblock/{{脚本ID}}`，用户未提供域名时先询问，不得猜测。
 - `endpoint.methods` 只能是 `GET`、`POST`。
 - 查询参数、请求头和请求体字段只有实际存在时才填写，并必须有名称、类型、描述和具体值；参数保留 `required` 表示运行时是否必填。
 - 需要描述 POST 请求体时填写 `content_type/schema/example`；每个响应必填 `status/description/content_type/schema/example`。

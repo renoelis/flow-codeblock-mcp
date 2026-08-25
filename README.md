@@ -7,7 +7,7 @@ Flow Codeblock 的本地 stdio MCP Server 与 Codex Skill。MCP 只调用 Flow C
 需要 Bun 1.4.0 或更高版本：
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.2.17
+bunx --bun flow-codeblock-mcp@0.2.18
 ```
 
 必须配置：
@@ -26,7 +26,7 @@ FLOW_CODEBLOCK_TOKEN=flow_xxx
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.2.17"],
+      "args": ["--bun", "flow-codeblock-mcp@0.2.18"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "https://qingcode.oalite.com",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>"
