@@ -59,7 +59,7 @@ MCP 预览与 Flow Codeblock 页面、Rust 文档接口使用同一套必填契�
 
 嵌套 Schema 和示例必须先自行递归检查一次，通过后再调用预览；不得依靠连续预览逐项发现缺失字段：
 
-- 请求体或响应体的根 Schema 节点必须填写 `type`；其所有嵌套 Schema 节点（包括 `properties` 字段、数组的 `items`、`additionalProperties` 值 Schema）都必须填写 `type/description/example`；代码或 `example` 中键名已知的对象必须用完整 `properties`，只有键名运行时才确定且所有值结构相同的动态字典才能用 `additionalProperties` 描述单个值 Schema；不得用 `type: "object"`、`example: {}` 的 `additionalProperties` 兜底任意 JSON 值；
+- 请求体或响应体的根 Schema 节点必须填写 `type`；其所有嵌套 Schema 节点（包括 `properties` 字段、数组的 `items`、对象形式的 `additionalProperties` 值 Schema）都必须填写 `type/description/example`；代码或 `example` 中键名已知的对象必须用完整 `properties`，只有键名运行时才确定且所有值结构相同的动态字典才能用对象形式的 `additionalProperties` 描述单个值 Schema；脚本原样透传且无法从代码、接口契约或示例确定结构的上游 JSON 对象使用 `additionalProperties: true`。不得用 `type: "object"`、`example: {}` 的对象 Schema 兜底任意 JSON 值；
 - 每个 `type: "array"` 必须有 `items`，且 `items` 本身也必须填写 `type/description/example`；对象数组还必须有完整 `items.properties`；
 - 数组值中的每个对象都必须包含 `items.properties` 的全部字段；
 - 任意层级示例中出现的字段必须有对应 `properties` 或 `additionalProperties`，且示例的 JSON 类型必须与 `type` 一致；列入 `required` 的字段必须出现在示例中，运行时可选字段可以省略；

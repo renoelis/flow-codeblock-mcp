@@ -84,7 +84,7 @@
         "example": {},
         "properties": {"type": "object", "description": "代码或 example 中键名已知时必须逐项填写，每个值为完整 schema_node。", "additionalProperties": {"$ref": "#/$defs/schema_node"}},
         "items": {"$ref": "#/$defs/schema_node"},
-        "additionalProperties": {"description": "仅用于键名运行时才确定且所有值结构相同的动态字典；对象值仍须完整描述其 properties，不得用空 object Schema 兜底任意 JSON 值。", "anyOf": [{"$ref": "#/$defs/schema_node"}, {"type": "boolean"}]},
+        "additionalProperties": {"description": "对象 Schema 仅用于键名运行时才确定且所有值结构相同的动态字典；true 仅用于脚本原样透传且结构确实未知的上游 JSON 对象；不得用空 object Schema 兜底任意 JSON 值。", "anyOf": [{"$ref": "#/$defs/schema_node"}, {"type": "boolean"}]},
         "required": {"type": "array", "items": {"type": "string"}}
       },
       "additionalProperties": true
@@ -98,7 +98,7 @@
         "example": {},
         "properties": {"type": "object", "description": "代码或 example 中键名已知时必须逐项填写，每个值为完整 schema_node。", "additionalProperties": {"$ref": "#/$defs/schema_node"}},
         "items": {"$ref": "#/$defs/schema_node"},
-        "additionalProperties": {"description": "仅用于键名运行时才确定且所有值结构相同的动态字典；对象值仍须完整描述其 properties，不得用空 object Schema 兜底任意 JSON 值。", "anyOf": [{"$ref": "#/$defs/schema_node"}, {"type": "boolean"}]},
+        "additionalProperties": {"description": "对象 Schema 仅用于键名运行时才确定且所有值结构相同的动态字典；true 仅用于脚本原样透传且结构确实未知的上游 JSON 对象；不得用空 object Schema 兜底任意 JSON 值。", "anyOf": [{"$ref": "#/$defs/schema_node"}, {"type": "boolean"}]},
         "required": {"type": "array", "items": {"type": "string"}}
       },
       "additionalProperties": true

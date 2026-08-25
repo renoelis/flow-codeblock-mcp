@@ -27,8 +27,8 @@ export const interfaceDocRequiredFields = {
 };
 
 export const interfaceDocNestedRules = [
-  "请求体或响应体的根 Schema 节点必须填写 type；其所有嵌套 Schema 节点（包括 properties 字段、array.items 和 additionalProperties 的值 Schema）都必须填写 type、description 和 example。",
-  "代码或 example 中键名已知的对象必须用 properties 逐项描述；additionalProperties 仅用于键名运行时才确定且所有值结构相同的动态字典，并描述单个动态值的完整 Schema。不得用 type=object、example={} 的 additionalProperties 作为任意 JSON 值的兜底。",
+  "请求体或响应体的根 Schema 节点必须填写 type；其所有嵌套 Schema 节点（包括 properties 字段、array.items 和对象形式 additionalProperties 的值 Schema）都必须填写 type、description 和 example。",
+  "代码或 example 中键名已知的对象必须用 properties 逐项描述；对象形式 additionalProperties 仅用于键名运行时才确定且所有值结构相同的动态字典，并描述单个动态值的完整 Schema。只有脚本原样透传且无法从代码、接口契约或示例确定结构的上游 JSON 对象，才使用 additionalProperties=true；不得用 type=object、example={} 的 additionalProperties 作为任意 JSON 值的兜底。",
   "每个 type=array 都必须有 items，且 items 本身必须填写 type、description 和 example；items.type=object 时还必须有完整 items.properties。数组 example 中的每个对象都必须覆盖 items.properties 的全部字段。",
   "任意层级 example 中出现的字段必须有对应 properties 或 additionalProperties，且 example 的 JSON 类型必须与 type 一致；properties 中列入 required 的字段必须出现在 example 中，运行时可选字段可以省略。",
   "JSON Schema 的 required 只表示运行时真正必填的业务字段；成功和错误结构不同应拆成不同 responses。",
@@ -37,7 +37,7 @@ export const interfaceDocNestedRules = [
 export const interfaceDocRepairRules = [
   "保留原 interface_doc 中未报错的字段，只修正错误列表指出的路径；不要为了修复单个字段而重写或删减 responses、logic_description 或 request。",
   "responses 和 logic_description 属于 interface_doc 根对象，request.body.example 与 schema 同级，properties、required、items、additionalProperties 属于 schema。MCP 会兼容纠正常见错位、从父级或同名蛇形/驼峰别名补全可推导的节点 example，并移除 usage_refs 中无效的非对象说明。",
-  "对象字段已能从代码或 example 确定时，在该对象上使用 properties 逐项描述；只有键名未知且每个动态值都符合同一 Schema 时才使用 additionalProperties。错误路径以 .additionalProperties 结尾且父对象键名已知时，应修正父对象的 properties，不要继续嵌套空 additionalProperties。",
+  "对象字段已能从代码或 example 确定时，在该对象上使用 properties 逐项描述；只有键名未知且每个动态值都符合同一 Schema 时才使用对象形式 additionalProperties。脚本原样透传且结构确实未知的上游 JSON 对象使用 additionalProperties=true；错误路径以 .additionalProperties 结尾且父对象键名已知时，应修正父对象的 properties，不要继续嵌套空 additionalProperties。",
   "每个 example 的类型必须与对应 type 一致；同一状态码存在字符串错误和对象错误等不同结构时，拆成多个 responses 分别描述。",
   "interface_doc 根对象只允许 schema_version/title/summary/endpoint/request/responses/logic_description/usage_refs；request 只允许 query/headers/body。ip_whitelist 是 flow_preview_script_change 的工具参数，不属于 interface_doc。",
   "schema.properties 只能放字段名到字段 Schema 的映射；schema.required 必须与 properties 同级，不能把 required: [] 放进 properties。",
@@ -60,7 +60,9 @@ const looseSchemaNode = z.looseObject({
     "固定对象字段到子 Schema 的映射；字段名直接作为 properties 的键。",
   ),
   items: z.unknown().optional().describe("数组元素的完整子 Schema。"),
-  additionalProperties: z.unknown().optional().describe("仅用于动态键字典的值 Schema，或布尔值。"),
+  additionalProperties: z.unknown().optional().describe(
+    "对象 Schema 用于值结构相同的动态键字典；true 仅用于脚本原样透传且结构确实未知的上游 JSON 对象；false 表示不允许未声明字段。",
+  ),
   required: z.array(z.string()).optional().describe("运行时真正必填的 properties 字段名。"),
 });
 
@@ -468,9 +470,18 @@ function validateSchemaExampleCoverage(
 
   if (schema.type !== "object") return;
   const properties = isObject(schema.properties) ? schema.properties : undefined;
-  const additionalProperties = isObject(schema.additionalProperties) ? schema.additionalProperties : undefined;
-  if (!properties && !additionalProperties) {
-    issues.push(`${schemaPath} 必须使用 properties 描述固定字段，或使用 additionalProperties 描述动态键的值 Schema`);
+  const additionalPropertiesValue = schema.additionalProperties;
+  const additionalProperties = isObject(additionalPropertiesValue) ? additionalPropertiesValue : undefined;
+  const allowsOpaqueProperties = additionalPropertiesValue === true;
+  if (
+    hasOwn(schema, "additionalProperties") &&
+    typeof additionalPropertiesValue !== "boolean" &&
+    !additionalProperties
+  ) {
+    issues.push(`${schemaPath}.additionalProperties 必须是布尔值或对象 Schema`);
+  }
+  if (!properties && !additionalProperties && !allowsOpaqueProperties) {
+    issues.push(`${schemaPath} 必须使用 properties 描述固定字段、使用 additionalProperties 描述同构动态键，或对原样透传且结构未知的上游 JSON 使用 additionalProperties=true`);
     return;
   }
   if (!isObject(example)) {
@@ -516,6 +527,8 @@ function validateSchemaExampleCoverage(
         false,
         true,
       );
+    } else if (allowsOpaqueProperties) {
+      continue;
     } else {
       issues.push(`${schemaPath}.properties 缺少字段 ${key} 的 Schema 描述`);
     }

@@ -167,6 +167,38 @@ describe("script preview tool", () => {
     expect(content.text).toContain("interface_doc.request.body.properties 已移入");
   });
 
+  test("accepts opaque upstream JSON response objects", async () => {
+    const interfaceDoc = misplacedInterfaceDoc();
+    const responseSchema = interfaceDoc.responses[0].schema;
+    responseSchema.properties.data = {
+      type: "object",
+      description: "脚本原样透传且结构由上游接口决定的响应对象",
+      example: { code: 0, message: "success", payload: { user_id: 1 } },
+      additionalProperties: true,
+    };
+    responseSchema.required = ["success", "data"];
+    responseSchema.example = {
+      success: true,
+      data: { code: 0, message: "success", payload: { user_id: 1 } },
+    };
+
+    const response = await client.callTool({
+      name: "flow_preview_script_change",
+      arguments: {
+        operation: "create",
+        code: "return { success: true, data: { code: 0, message: 'success', payload: { user_id: 1 } } };",
+        interface_doc: interfaceDoc,
+      },
+    });
+
+    expect(response.isError).not.toBe(true);
+    const validatedDocument = validationRequest?.interface_doc as Record<string, unknown>;
+    const responses = validatedDocument.responses as Array<Record<string, unknown>>;
+    const schema = responses[0].schema as Record<string, unknown>;
+    const properties = schema.properties as Record<string, Record<string, unknown>>;
+    expect(properties.data.additionalProperties).toBe(true);
+  });
+
   test("recovers document fields misplaced at the tool argument level", async () => {
     const interfaceDoc = misplacedInterfaceDoc() as Record<string, unknown>;
     const responses = interfaceDoc.responses;

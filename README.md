@@ -7,7 +7,7 @@ Flow Codeblock 的本地 stdio MCP Server 与 Codex Skill。MCP 只调用 Flow C
 需要 Bun 1.4.0 或更高版本：
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.2.21
+bunx --bun flow-codeblock-mcp@0.2.22
 ```
 
 必须配置：
@@ -26,7 +26,7 @@ FLOW_CODEBLOCK_TOKEN=flow_xxx
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.2.21"],
+      "args": ["--bun", "flow-codeblock-mcp@0.2.22"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "https://qingcode.oalite.com",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>"
@@ -43,7 +43,7 @@ npm 包包含 MCP 运行源码、`flow-codeblock` Skill、`AGENT_PROMPT.md`、�
 - 写代码前调用 `flow_write_code`；非脚本模式从 `input.<字段>` 读取，脚本模式从 `input.query/header/body/cookies` 读取。
 - 查询当前脚本时调用 `flow_get_script`，只传 `script_id`；MCP 会固定向 API 附加 `version=0` 标识当前版本，并将详情中的 `code_base64` 解码为 UTF-8 `code` 返回给大模型。只有明确查询具体历史版本时才调用 `flow_get_script_version`，该工具同样会解码代码；无法严格解码时保留原始 `code_base64`。接口文档当前与历史版本分别使用 `flow_get_script_documentation` 和 `flow_get_script_documentation_version`。
 - 所有工具 JSON 出参中的 `token`、`access_token`、`authorization`、`refresh_token`、`qingcodeToken` 等凭据字段都会自动脱敏；统计字段如 `token_cache`、`unique_tokens` 不会被误处理。
-- `flow_preview_script_change` 会向模型暴露结构化的 `interface_doc` 工具 Schema。预览前还会纠正可无歧义识别的 `responses/logic_description` 深层错位、误放的完整请求示例、`schema.properties.required`、脚本 `description` 和 `ip_whitelist`，并通过 `interface_doc_normalizations` 返回修正记录；更新时与当前值相同的 `ip_whitelist` 会从变更载荷中省略，并通过 `ignored_changes` 说明，避免只改接口文档时误报白名单变更；固定字段对象使用 `properties`，仅键名未知且值同构的字典使用 `additionalProperties`。
+- `flow_preview_script_change` 会向模型暴露结构化的 `interface_doc` 工具 Schema。预览前还会纠正可无歧义识别的 `responses/logic_description` 深层错位、误放的完整请求示例、`schema.properties.required`、脚本 `description` 和 `ip_whitelist`，并通过 `interface_doc_normalizations` 返回修正记录；更新时与当前值相同的 `ip_whitelist` 会从变更载荷中省略，并通过 `ignored_changes` 说明，避免只改接口文档时误报白名单变更；固定字段对象使用 `properties`，键名未知且值同构的字典使用对象形式 `additionalProperties`，仅脚本原样透传且结构确实未知的上游 JSON 对象使用 `additionalProperties: true`。
 - 创建或更新脚本必须先调用 `flow_preview_script_change`，向用户展示预览并获得明确确认后才能调用 `flow_apply_script_change`。
 - 释放所有权时，先用 `flow_request_script_owner_challenge(action=release)` 申请当前所有者验证码，再调用 `flow_release_script_ownership`；脚本必须先解锁，释放后其他 Token 使用者可以重新认领。
 - 脚本 POST 调用方直接提交业务 JSON，不包装为 `input` 或 `input.body`。

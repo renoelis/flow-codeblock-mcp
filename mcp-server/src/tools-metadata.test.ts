@@ -191,7 +191,8 @@ describe("MCP tool metadata", () => {
     expect(interfaceDoc?.description).toContain("usage_refs 仅用于真实应用引用");
     expect(interfaceDoc?.description).toContain("request={query?,headers?,body?}");
     expect(interfaceDoc?.description).toContain("请求体或响应体的根 Schema 节点必须填写 type");
-    expect(interfaceDoc?.description).toContain("additionalProperties 仅用于键名运行时才确定");
+    expect(interfaceDoc?.description).toContain("对象形式 additionalProperties 仅用于键名运行时才确定");
+    expect(interfaceDoc?.description).toContain("additionalProperties=true");
     expect(interfaceDoc?.description).toContain("不得用 type=object、example={} 的 additionalProperties");
     expect(interfaceDoc?.description).toContain("ip_whitelist 是 flow_preview_script_change 的工具参数");
     expect(interfaceDoc?.description).toContain("schema.required 必须与 properties 同级");

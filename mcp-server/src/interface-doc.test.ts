@@ -131,6 +131,24 @@ describe("interfaceDocCompletenessIssues", () => {
     );
   });
 
+  test("allows explicitly opaque upstream JSON objects", () => {
+    const document = completePostDocument();
+    document.responses[0].schema.properties.data = {
+      type: "object",
+      description: "脚本原样透传且结构由上游接口决定的响应对象",
+      example: { code: 0, message: "success", payload: { user_id: 1 } },
+      additionalProperties: true,
+    };
+    document.responses[0].schema.required.push("data");
+    document.responses[0].example.data = {
+      code: 0,
+      message: "success",
+      payload: { user_id: 1 },
+    };
+
+    expect(interfaceDocCompletenessIssues(document, "create")).toEqual([]);
+  });
+
   test("normalizes misplaced schema fields and promotes schema root examples", () => {
     const document = completePostDocument();
     const body = document.request.body as Record<string, unknown>;

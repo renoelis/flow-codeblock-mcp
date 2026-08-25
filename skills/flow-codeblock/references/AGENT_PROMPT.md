@@ -57,8 +57,8 @@
 - 需要描述 POST 请求体时填写 `content_type/schema/example`；每个响应必填 `status/description/content_type/schema/example`。
 - 响应 Schema 中每个字段必须填写 `type/description/example`；字段名称由 `properties` 的键表达。
 - `schema.properties` 只能放字段名到字段 Schema 的映射；`schema.required` 必须与 `properties` 同级，不能把 `required: []` 放进 `properties`。
-- 请求体或响应体的根 Schema 节点必须填写 `type`；其所有嵌套 Schema 节点（包括 `properties` 字段、数组的 `items`、`additionalProperties` 值 Schema）都必须填写 `type/description/example`。
-- 代码或 `example` 中键名已知的对象必须用 `properties` 逐项描述；`additionalProperties` 只用于键名运行时才确定且所有值结构相同的动态字典，并描述单个动态值的完整 Schema。不得用 `additionalProperties: {"type":"object","example":{}}` 表示“允许任意 JSON 值”，也不得在校验报错后继续嵌套同样的空对象 Schema。
+- 请求体或响应体的根 Schema 节点必须填写 `type`；其所有嵌套 Schema 节点（包括 `properties` 字段、数组的 `items`、对象形式的 `additionalProperties` 值 Schema）都必须填写 `type/description/example`。
+- 代码或 `example` 中键名已知的对象必须用 `properties` 逐项描述；对象形式的 `additionalProperties` 只用于键名运行时才确定且所有值结构相同的动态字典，并描述单个动态值的完整 Schema。只有脚本原样透传且无法从代码、接口契约或示例确定结构的上游 JSON 对象，才使用 `additionalProperties: true`；不得用 `additionalProperties: {"type":"object","example":{}}` 表示“允许任意 JSON 值”，也不得在校验报错后继续嵌套同样的空对象 Schema。
 - 每个数组必须有 `items`，且 `items` 本身也必须填写 `type/description/example`；`items.type=object` 时还必须有完整 `items.properties`，数组值中的每个对象必须覆盖全部字段。
 - 请求体和响应体任意层级的示例中，出现的字段必须有对应 `properties` 或 `additionalProperties`，并且示例的 JSON 类型必须与对应 `type` 一致；列入 `required` 的字段必须出现在示例中，运行时可选字段可以省略。
 - JSON Schema 的 `required` 只写运行时真正必填的业务字段；成功和错误结构不同应拆成不同响应，同一状态码下字符串错误与对象错误等不同结构也应拆开描述。
