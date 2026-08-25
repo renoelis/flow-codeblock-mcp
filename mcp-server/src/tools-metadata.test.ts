@@ -54,6 +54,8 @@ describe("MCP tool metadata", () => {
     expect(instructions).toContain("MCP 不提供删除工具");
     expect(instructions).toContain("不得猜测 version");
     expect(instructions).toContain("flow_release_script_ownership");
+    expect(instructions).toContain("只有工具成功返回 preview_id");
+    expect(instructions).toContain("禁止读取 process.env");
     expect(tools.map((tool) => tool.name).sort()).toEqual(expectedToolNames);
     expect(tools.some((tool) => tool.name.includes("delete"))).toBe(false);
   });
@@ -126,7 +128,10 @@ describe("MCP tool metadata", () => {
     expect(byName.get("flow_write_code")?.description).toContain("non_script 从全局 input.<业务字段>");
     expect(byName.get("flow_write_code")?.description).toContain("script 从 input.query/header/body/cookies");
     expect(byName.get("flow_execute_script")?.description).toContain("不要包装为 {input:...} 或 {body:...}");
+    expect(byName.get("flow_execute_script")?.description).toContain("完整 script_url");
     expect(byName.get("flow_execute_code")?.description).toContain("input 参数在此模式会原样成为全局 input");
+    expect(byName.get("flow_execute_code")?.description).toContain("完整 execution_url");
+    expect(byName.get("flow_execute_code")?.description).toContain("不得读取 process.env");
     expect(byName.get("flow_preview_script_change")?.description).toContain("ip_whitelist=null 或 [] 表示清除");
     expect(byName.get("flow_preview_script_change")?.description).toContain("interface_doc_normalizations");
     expect(byName.get("flow_preview_script_change")?.description).toContain("保留原文档");
@@ -207,6 +212,49 @@ describe("MCP tool metadata", () => {
       .toContain("script 模式无需询问调用域名");
     expect(byName.get("flow_apply_script_change")?.description).toContain("FLOW_CODEBLOCK_BASE_URL + /flow/codeblock/");
     expect(byName.get("flow_apply_script_change")?.description).toContain("data.script_url");
+
+    const toolsWithoutCallUrls = [
+      "flow_token_info",
+      "flow_list_scripts",
+      "flow_get_script",
+      "flow_get_script_version",
+      "flow_get_script_documentation",
+      "flow_get_script_documentation_version",
+      "flow_preview_script_change",
+      "flow_script_stats",
+      "flow_request_script_owner_challenge",
+      "flow_lock_script",
+      "flow_unlock_script",
+      "flow_release_script_ownership",
+      "flow_start_ownership_transfer",
+      "flow_confirm_ownership_transfer",
+    ];
+    for (const toolName of toolsWithoutCallUrls) {
+      const description = byName.get(toolName)?.description ?? "";
+      expect(description, toolName).not.toContain("script_url");
+      expect(description, toolName).not.toContain("execution_url");
+    }
+  });
+
+  test("returns a full execution URL only for non-script writing", async () => {
+    const nonScriptResponse = await client.callTool({
+      name: "flow_write_code",
+      arguments: { mode: "non_script", requirement: "处理输入并返回结果" },
+    });
+    const scriptResponse = await client.callTool({
+      name: "flow_write_code",
+      arguments: { mode: "script", requirement: "创建一个持久脚本" },
+    });
+    const nonScriptPayload = JSON.parse(
+      nonScriptResponse.content[0].type === "text" ? nonScriptResponse.content[0].text : "{}",
+    );
+    const scriptPayload = JSON.parse(
+      scriptResponse.content[0].type === "text" ? scriptResponse.content[0].text : "{}",
+    );
+
+    expect(nonScriptPayload.execution_url).toBe("http://127.0.0.1:1/flow/codeblock");
+    expect(scriptPayload).not.toHaveProperty("execution_url");
+    expect(scriptPayload).not.toHaveProperty("script_url");
   });
 
   test("returns both authoritative files unchanged through the MCP transport", async () => {

@@ -18,7 +18,7 @@
 
 ## 输入契约
 
-所有用户数据都从全局 `input` 读取，不从环境变量、持久化全局变量或其他外部状态读取。
+所有用户数据都从全局 `input` 读取，不从环境变量、持久化全局变量或其他外部状态读取。用户函数收到的 `process` 为 `undefined`，严禁读取 `process.env` 或假设服务端会为单个脚本配置业务环境变量。百度 AK 等第三方 API 密钥必须由外部调用方通过请求体、查询参数或非平台认证用途的业务请求头传入，并在接口文档中声明对应输入字段；不得把真实密钥写入代码、文档示例或说明。`FLOW_CODEBLOCK_TOKEN` 仅由 MCP Server 用于平台认证，不会进入用户代码。
 
 ### 非脚本模式
 
@@ -70,6 +70,8 @@
 
 调用预览前必须按上述规则递归自检一次请求和所有响应；不要依靠重复调用预览工具逐项发现缺失字段。
 
+只有 `flow_preview_script_change` 成功返回 `preview_id` 才能向用户说明预览已通过；`isError=true`、`-32602` 或没有 `preview_id` 均表示预览失败，必须先修正。创建时省略 `expected_version`；MCP 仅为兼容模型常见误传而自动忽略 `expected_version=0`。
+
 `interface_doc` 根对象只放 `schema_version/title/summary/endpoint/request/responses/logic_description/usage_refs`；`request` 只放 `query/headers/body`；`ip_whitelist` 是 `flow_preview_script_change` 的工具参数，不放进 `interface_doc`。`responses/logic_description` 必须放在 `interface_doc` 根对象内；请求体和每个响应的完整 `example` 与 `schema` 同级，`request.example` 应写成 `request.body.example`，`properties/required/items/additionalProperties` 放在 `schema` 内。MCP 会在预览前兼容纠正这些无歧义的位置错误，从父级示例或同名蛇形/驼峰别名补全可推导的节点示例，并移除 `usage_refs` 中无效的非对象条目；预览成功时通过 `interface_doc_normalizations` 返回修正记录，仍有错误时在错误文本的“本次已自动规范化”中返回。保留原文档和所有未报错字段，只修正错误列表中的准确路径；不要重写整份文档，也不要删除已有的 `responses`、`logic_description` 或 `request`。
 
 ## 原生能力和模块
@@ -102,3 +104,5 @@
 3. 脚本模式紧接着输出独立的 `script-interface-doc.v1` JSON 代码块；非脚本模式说明 `POST /flow/codeblock` 的调用字段和地址。
 4. 简述参数、行为、响应和错误处理。
 5. 检查输入来源、`return`/`qf_output` 二选一、异步生命周期、原生能力优先、禁止能力、可序列化结果和敏感信息。
+
+非脚本模式使用 `flow_write_code` 或 `flow_execute_code` 返回的完整 `execution_url`。脚本创建、更新和执行使用 `flow_apply_script_change` 或 `flow_execute_script` 返回的完整 `script_url`；其他脚本管理工具无需主动告知调用地址。

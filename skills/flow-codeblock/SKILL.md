@@ -9,7 +9,7 @@ description: 使用 Flow Codeblock MCP 工具写出非脚本代码或创建、�
 
 ## 边界
 
-- MCP 必须从环境读取 `FLOW_CODEBLOCK_BASE_URL` 和 `FLOW_CODEBLOCK_TOKEN`；缺少任一变量时拒绝启动。公网服务使用 `https://qingcode.oalite.com`，仅本机部署 Rust 服务时使用对应的 localhost 地址。脚本发布后的最终调用地址固定为 `FLOW_CODEBLOCK_BASE_URL + /flow/codeblock/{script_id}`，由 `flow_apply_script_change` 在 `data.script_url` 返回，不要询问用户域名。不要把 Token 放入工具参数、代码或文档。
+- MCP 必须从环境读取 `FLOW_CODEBLOCK_BASE_URL` 和 `FLOW_CODEBLOCK_TOKEN`；缺少任一变量时拒绝启动。公网服务使用 `https://qingcode.oalite.com`，仅本机部署 Rust 服务时使用对应的 localhost 地址。非脚本执行地址固定为 `FLOW_CODEBLOCK_BASE_URL + /flow/codeblock`；脚本创建、更新和执行地址固定为 `FLOW_CODEBLOCK_BASE_URL + /flow/codeblock/{script_id}`。对应工具会直接返回 `execution_url` 或 `script_url`，不要询问用户域名；其他工具无需主动告知调用地址。不要把 Token 放入工具参数、代码或文档。
 - 不提供脚本删除、Token 管理或任意 HTTP 代理工具。删除请求必须拒绝，并引导用户使用现有网页或 REST API。
 - 执行工具使用 MCP Web worker lane，但仍执行服务端认证、配额、限流、安全校验、审计和统计。
 - 锁定、解锁、释放和所有权转移只能使用对应验证码工具，不猜测、记录或复用验证码。
@@ -24,7 +24,7 @@ MCP 所有工具的 JSON 出参都会递归脱敏 `token`、`access_token`、`au
 
 ### `non_script`
 
-只生成 JavaScript 和 `POST /flow/codeblock` 调用规则，不创建脚本。请求体中的 `input` 是业务对象本身，代码使用 `input.<字段>`。
+只生成 JavaScript 和完整 `POST ${FLOW_CODEBLOCK_BASE_URL}/flow/codeblock` 调用规则，不创建脚本。`flow_write_code` 和 `flow_execute_code` 会返回 `execution_url`。请求体中的 `input` 是业务对象本身，代码使用 `input.<字段>`。
 
 只要求写代码时不要执行；用户明确要求测试时才调用 `flow_execute_code`。
 
@@ -40,6 +40,8 @@ MCP 所有工具的 JSON 出参都会递归脱敏 `token`、`access_token`、`au
 2. 调用 `flow_preview_script_change`。创建不带 `script_id`；更新带 `script_id` 和 `expected_version`。更新预览会先确认脚本存在且版本未变化；404 或版本冲突时停止并重新读取，不得继续发布。
 3. 展示预览结果。只有用户明确确认后，才调用 `flow_apply_script_change`，传 `preview_id` 和 `confirm: true`。
 4. 创建成功后调用 `flow_execute_script`，其 `body` 参数直接传业务 JSON，报告执行和配额结果。
+
+只有工具成功返回 `preview_id` 才能声称预览通过；`isError=true`、`-32602` 或没有 `preview_id` 时必须明确报告失败。`create` 不应传 `expected_version`，MCP 会兼容忽略误传的 `expected_version=0`。创建或更新发布成功后使用 `flow_apply_script_change.data.script_url`，执行脚本时使用 `flow_execute_script.script_url`。
 
 创建时 `description` 是脚本列表展示名称。用户未指定名称时，根据需求概括为不超过 15 个字符；用户明确给出较长名称时保留原意，不要擅自截断。
 
@@ -85,4 +87,4 @@ MCP 预览与 Flow Codeblock 页面、Rust 文档接口使用同一套必填契�
 - 使用 npm 模块：[modules.json](references/modules.json)
 - 安全规则排查：[dangerous_patterns.json](references/dangerous_patterns.json)
 
-代码必须使用 `input` 和顶层 `return`，只使用允许模块，不使用动态 `import`、间接 `require`、`module`、`exports`、浏览器 API 或危险模式。接口契约只放在独立 JSON 中，不得写成 JSDoc 或代码注释。
+代码必须使用 `input` 和顶层 `return`，只使用允许模块，不使用动态 `import`、间接 `require`、`module`、`exports`、浏览器 API 或危险模式。用户代码中的 `process` 为 `undefined`，不得读取 `process.env` 或假设服务器预置业务环境变量；百度 AK 等第三方 API 密钥必须由外部调用方通过请求体、查询参数或非平台认证用途的业务请求头传入，并作为输入字段写入接口文档。`FLOW_CODEBLOCK_TOKEN` 只供 MCP 调用平台 API，不会暴露给用户脚本。接口契约只放在独立 JSON 中，不得写成 JSDoc 或代码注释。

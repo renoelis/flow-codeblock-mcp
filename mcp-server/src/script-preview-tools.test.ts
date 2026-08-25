@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 let validationRequest: Record<string, unknown> | undefined;
+let createRequest: Record<string, unknown> | undefined;
 let updateRequest: Record<string, unknown> | undefined;
 let currentIpWhitelist: string[] | null = null;
 const apiServer = Bun.serve({
@@ -15,6 +16,7 @@ const apiServer = Bun.serve({
       return Response.json({ success: true, data: { valid: true, warnings: [] } });
     }
     if (request.method === "POST" && url.pathname === "/flow/scripts") {
+      createRequest = await request.json() as Record<string, unknown>;
       return Response.json({ success: true, data: { script_id: "created-script", version: 1 } });
     }
     if (request.method === "GET" && url.pathname.startsWith("/flow/scripts/")) {
@@ -102,6 +104,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   validationRequest = undefined;
+  createRequest = undefined;
   updateRequest = undefined;
   currentIpWhitelist = null;
 });
@@ -172,6 +175,56 @@ describe("script preview tool", () => {
     if (!applyContent || applyContent.type !== "text") throw new Error("apply did not return text");
     const applied = JSON.parse(applyContent.text) as Record<string, Record<string, unknown>>;
     expect(applied.data.script_url).toBe(`${apiServer.url.origin}/flow/codeblock/created-script`);
+  });
+
+  test("ignores expected_version zero on create previews", async () => {
+    const previewResponse = await client.callTool({
+      name: "flow_preview_script_change",
+      arguments: {
+        operation: "create",
+        expected_version: 0,
+        code: "return { success: true };",
+        interface_doc: misplacedInterfaceDoc(),
+      },
+    });
+
+    expect(previewResponse.isError).not.toBe(true);
+    const previewContent = previewResponse.content.find((item) => item.type === "text");
+    if (!previewContent || previewContent.type !== "text") throw new Error("preview did not return text");
+    const preview = JSON.parse(previewContent.text) as Record<string, unknown>;
+    expect(preview.input_normalizations).toEqual([
+      "create 操作误传的 expected_version=0 已忽略；该字段仅用于 update",
+    ]);
+
+    const applyResponse = await client.callTool({
+      name: "flow_apply_script_change",
+      arguments: { preview_id: preview.preview_id, confirm: true },
+    });
+    expect(applyResponse.isError).not.toBe(true);
+    expect(createRequest).not.toHaveProperty("expected_version");
+  });
+
+  test("rejects server environment access before API validation", async () => {
+    for (const code of [
+      "return process.env.BAIDU_MAP_AK;",
+      "return process?.['env']?.BAIDU_MAP_AK;",
+    ]) {
+      validationRequest = undefined;
+      const response = await client.callTool({
+        name: "flow_preview_script_change",
+        arguments: {
+          operation: "create",
+          code,
+          interface_doc: misplacedInterfaceDoc(),
+        },
+      });
+
+      expect(response.isError).toBe(true);
+      const content = response.content.find((item) => item.type === "text");
+      if (!content || content.type !== "text") throw new Error("preview error did not return text");
+      expect(content.text).toContain("第三方 API 密钥必须由外部调用方");
+      expect(validationRequest).toBeUndefined();
+    }
   });
 
   test("normalizes misplaced response schema keywords and null placeholders", async () => {

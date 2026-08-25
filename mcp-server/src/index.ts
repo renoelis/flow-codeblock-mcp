@@ -57,6 +57,10 @@ function jsonText(value: unknown): string {
   return JSON.stringify(redactTokenFields(value), null, 2);
 }
 
+function scriptUrl(scriptId: string): string {
+  return `${baseUrl}/flow/codeblock/${encodeURIComponent(scriptId)}`;
+}
+
 function withScriptUrl(value: unknown, fallbackScriptId?: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const response = value as Record<string, unknown>;
@@ -70,7 +74,7 @@ function withScriptUrl(value: unknown, fallbackScriptId?: unknown): unknown {
     ...response,
     data: {
       ...data,
-      script_url: `${baseUrl}/flow/codeblock/${encodeURIComponent(scriptId)}`,
+      script_url: scriptUrl(scriptId),
     },
   };
 }
@@ -191,6 +195,18 @@ function decodeScriptCode(value: string): string | undefined {
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
     return undefined;
+  }
+}
+
+const userEnvironmentAccessPattern =
+  /\bprocess\s*(?:(?:\?\s*)?\.\s*env\b|(?:\?\s*\.\s*)?\[\s*(["'])env\1\s*\])/;
+
+function assertNoUserEnvironmentAccess(code: string | undefined, codeBase64: string | undefined): void {
+  const source = code ?? (codeBase64 === undefined ? undefined : decodeScriptCode(codeBase64));
+  if (source !== undefined && userEnvironmentAccessPattern.test(source)) {
+    throw new Error(
+      "用户代码不能读取 process.env 或服务器环境变量；第三方 API 密钥必须由外部调用方通过请求体、查询参数或业务请求头传入，并同步写入接口文档",
+    );
   }
 }
 
@@ -332,11 +348,12 @@ const serverInstructions = [
   "Flow Codeblock MCP 可独立使用，不依赖 Skill。写代码前先调用 flow_write_code 获取对应模式的完整代码与输入契约。",
   "非脚本模式：代码读取全局 input.<字段>；只写代码时不要执行，用户要求测试时调用 flow_execute_code。",
   "脚本模式：代码读取 input.query/input.header/input.body/input.cookies；调用方 POST 时直接发送业务 JSON，不包装 input 或 input.body。创建或修改代码时必须同时生成完整 interface_doc。",
+  "用户代码中的 process 为 undefined，禁止读取 process.env 或假设服务器预置业务环境变量。第三方 API 密钥由外部调用方通过 input 对应的请求体、查询参数或业务请求头传入，并在接口文档中声明；FLOW_CODEBLOCK_TOKEN 仅供 MCP 平台认证。",
   "读取当前脚本使用 flow_get_script 且只传 script_id，MCP 会固定以 version=0 标识当前版本；只有用户明确要求具体历史版本时才使用 flow_get_script_version。不得猜测 version，接口文档版本也不得猜测。",
   "flow_get_script 和 flow_get_script_version 会把脚本详情中的 code_base64 解码为 UTF-8 code 返回；严格解码失败时保留原始 code_base64。",
   "所有工具 JSON 出参会递归脱敏 token、access_token、authorization、refresh_token、qingcodeToken 等凭据字段；统计字段 token_cache、unique_tokens 不会被误处理。",
   "释放所有权时先调用 flow_request_script_owner_challenge(action=release)，再使用同一脚本、邮箱和验证码调用 flow_release_script_ownership；脚本必须已解锁。",
-  "任何脚本变更都先调用 flow_preview_script_change；只有向用户展示预览且获得明确确认后，才调用 flow_apply_script_change。不得把用户要求预览或修改视为发布确认。",
+  "任何脚本变更都先调用 flow_preview_script_change；只有工具成功返回 preview_id 才能声称预览通过。isError=true、-32602 或没有 preview_id 都必须明确报告失败；只有向用户展示成功预览且获得明确确认后，才调用 flow_apply_script_change。不得把用户要求预览或修改视为发布确认。",
   "脚本发布成功后直接使用 flow_apply_script_change 返回的 data.script_url；该地址由 MCP 使用 FLOW_CODEBLOCK_BASE_URL 和脚本 ID 生成，不要询问用户公网域名。",
   "更新时只提交用户本次要求修改的字段；只改接口文档时省略 ip_whitelist。预览返回 ignored_changes 表示对应字段已从发布载荷移除，不会修改该字段，也无需因此重新预览。",
   "MCP 不提供删除工具。遇到删除请求必须拒绝调用其他工具替代删除，并告知用户通过 Flow Codeblock 网页或 REST DELETE /flow/scripts/{scriptId} 自行删除。",
@@ -344,7 +361,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.25" },
+  { name: "flow-codeblock", version: "0.2.26" },
   { instructions: serverInstructions },
 );
 
@@ -352,7 +369,7 @@ server.registerTool(
   "flow_write_code",
   {
     title: "获取 Flow JavaScript 编写契约",
-    description: "写任何 Flow Codeblock JavaScript 时首先调用。根据 mode 返回 AGENT_PROMPT.md 权威规则原文及后续工具流程，大模型必须完整遵守后再依据 requirement 生成代码；规则由文件运行时直接读取，不维护第二份摘要。本工具本身不生成、保存或执行代码。用户未指定模式时选 non_script；要求创建/更新持久脚本或 HTTP 重定向时选 script。non_script 从全局 input.<业务字段> 取值；script 从 input.query/header/body/cookies 取值并独立输出完整 script-interface-doc.v1。完整接口文档 JSON Schema 体积较大，仅确实需要时设置 include_full_schema=true，此时同样直接读取权威 Schema 文件。",
+    description: "写任何 Flow Codeblock JavaScript 时首先调用。根据 mode 返回 AGENT_PROMPT.md 权威规则原文及后续工具流程，大模型必须完整遵守后再依据 requirement 生成代码；规则由文件运行时直接读取，不维护第二份摘要。本工具本身不生成、保存或执行代码。用户未指定模式时选 non_script；要求创建/更新持久脚本或 HTTP 重定向时选 script。non_script 从全局 input.<业务字段> 取值，并返回由 FLOW_CODEBLOCK_BASE_URL 生成的完整 execution_url；script 从 input.query/header/body/cookies 取值并独立输出完整 script-interface-doc.v1。用户代码不得读取 process.env，第三方 API 密钥必须由外部调用方通过 input 传入。完整接口文档 JSON Schema 体积较大，仅确实需要时设置 include_full_schema=true，此时同样直接读取权威 Schema 文件。",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       mode: z.enum(["non_script", "script"]).describe(
@@ -366,9 +383,12 @@ server.registerTool(
       ),
     },
   },
-  async ({ mode, requirement, include_full_schema }) => result(
-    codeWriterContext(mode, requirement, include_full_schema ?? false),
-  ),
+  async ({ mode, requirement, include_full_schema }) => {
+    const context = codeWriterContext(mode, requirement, include_full_schema ?? false);
+    return result(mode === "non_script"
+      ? { ...context, execution_url: `${baseUrl}/flow/codeblock` }
+      : context);
+  },
 );
 
 server.registerTool(
@@ -661,7 +681,7 @@ const changeSchema = {
   ),
   script_id: z.string().min(1).optional().describe("仅 update 必填；目标脚本 ID。create 时必须省略。"),
   code: z.string().min(1).optional().describe(
-    "UTF-8 JavaScript 源码，与 code_base64 二选一。脚本代码从 input.query/header/body/cookies 读取请求，并以顶层 return 返回可 JSON 序列化结果；更新代码时必须同时提交完整 interface_doc。",
+    "UTF-8 JavaScript 源码，与 code_base64 二选一。脚本代码从 input.query/header/body/cookies 读取请求，并以顶层 return 返回可 JSON 序列化结果；不得读取 process.env，第三方 API 密钥必须由外部调用方通过 input 传入；更新代码时必须同时提交完整 interface_doc。",
   ),
   code_base64: z.string().min(1).optional().describe(
     "已 Base64 编码的 UTF-8 JavaScript，与 code 二选一；通常优先直接传 code。更新代码时必须同时提交完整 interface_doc。",
@@ -679,8 +699,8 @@ const changeSchema = {
   logic_description: z.unknown().optional().describe(
     "仅用于兼容纠错：误放在工具参数层的逻辑说明会自动移入 interface_doc.logic_description；新调用必须直接写入 interface_doc。",
   ),
-  expected_version: z.number().int().positive().optional().describe(
-    "仅 update 必填；必须取自刚刚 flow_get_script 返回的 current_version。版本变化会返回 409，此时重新读取并重新预览。create 时必须省略。",
+  expected_version: z.number().int().nonnegative().optional().describe(
+    "仅 update 必填且必须大于 0，取自刚刚 flow_get_script 返回的 current_version。版本变化会返回 409，此时重新读取并重新预览。create 时必须省略；兼容误传 0 并自动忽略。",
   ),
 };
 
@@ -700,6 +720,11 @@ server.registerTool(
         logic_description: misplacedLogicDescription,
         ...changeInput
       } = input;
+      const inputNormalizations: string[] = [];
+      if (changeInput.operation === "create" && changeInput.expected_version === 0) {
+        delete changeInput.expected_version;
+        inputNormalizations.push("create 操作误传的 expected_version=0 已忽略；该字段仅用于 update");
+      }
       if (
         changeInput.interface_doc === undefined &&
         (misplacedResponses !== undefined || misplacedLogicDescription !== undefined)
@@ -743,11 +768,13 @@ server.registerTool(
             interface_doc: interfaceDocNormalization.document,
           };
       try {
+        assertNoUserEnvironmentAccess(preparedInput.code, preparedInput.code_base64);
         assertScriptChangeInput(preparedInput);
       } catch (error) {
-        if (error instanceof Error && interfaceDocNormalization.changes.length > 0) {
+        const normalizations = [...inputNormalizations, ...interfaceDocNormalization.changes];
+        if (error instanceof Error && normalizations.length > 0) {
           throw new Error(
-            `${error.message}\n本次已自动规范化：\n- ${interfaceDocNormalization.changes.join("\n- ")}`,
+            `${error.message}\n本次已自动规范化：\n- ${normalizations.join("\n- ")}`,
           );
         }
         throw error;
@@ -794,6 +821,7 @@ server.registerTool(
         operation: effectiveInput.operation,
         expires_at: new Date(Date.now() + previewTtlMs).toISOString(),
         validation,
+        ...(inputNormalizations.length > 0 ? { input_normalizations: inputNormalizations } : {}),
         ...(interfaceDocNormalization.changes.length > 0
           ? { interface_doc_normalizations: interfaceDocNormalization.changes }
           : {}),
@@ -861,7 +889,7 @@ server.registerTool(
   "flow_execute_script",
   {
     title: "执行已发布脚本",
-    description: "按 GET/POST 调用已发布脚本进行真实测试或业务执行。调用前优先读取 flow_get_script_documentation，严格按文档传参。POST 的 body 就是调用方业务 JSON，不要包装为 {input:...} 或 {body:...}；平台运行时才把它构建到代码的 input.body。query/header 分别构建到 input.query/input.header。不得传 accessToken、Cookie、CSRF 或 MCP lane 标识，认证由环境变量自动注入。每次调用都会扣配额、限流、审计并进入 Web worker lane；只在用户要求执行/测试时调用。",
+    description: "按 GET/POST 调用已发布脚本进行真实测试或业务执行，并返回由 FLOW_CODEBLOCK_BASE_URL 生成的完整 script_url。调用前优先读取 flow_get_script_documentation，严格按文档传参。POST 的 body 就是调用方业务 JSON，不要包装为 {input:...} 或 {body:...}；平台运行时才把它构建到代码的 input.body。query/header 分别构建到 input.query/input.header。第三方 API 密钥属于业务输入，按接口文档通过 body/query/业务请求头传入；不得传平台 accessToken、Cookie、CSRF 或 MCP lane 标识，平台认证由 MCP 环境变量自动注入。每次调用都会扣配额、限流、审计并进入 Web worker lane；只在用户要求执行/测试时调用。",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     inputSchema: {
       script_id: z.string().min(1).describe("要执行的已发布脚本 ID。"),
@@ -897,7 +925,11 @@ server.registerTool(
         headers: safeHeaders,
         body: method === "POST" && body !== undefined ? JSON.stringify(body) : undefined,
       }, true);
-      return result({ quota_notice: "本次执行已按普通执行请求处理并扣减配额。", response });
+      return result({
+        script_url: scriptUrl(script_id),
+        quota_notice: "本次执行已按普通执行请求处理并扣减配额。",
+        response,
+      });
     } catch (error) {
       return apiError(error);
     }
@@ -908,7 +940,7 @@ server.registerTool(
   "flow_execute_code",
   {
     title: "执行非脚本 JavaScript",
-    description: "真实执行一次不保存的非脚本 JavaScript。代码必须先按 flow_write_code(mode=non_script) 返回的契约生成：业务数据从全局 input.<字段> 读取，以顶层 return 返回可 JSON 序列化值；input 参数在此模式会原样成为全局 input。code 与 code_base64 必须且只能提供一个。调用会扣配额、限流、执行安全校验、审计并进入 Web worker lane；只写代码时不要调用，用户明确要求测试/执行时才调用。",
+    description: "真实执行一次不保存的非脚本 JavaScript，并返回由 FLOW_CODEBLOCK_BASE_URL 生成的完整 execution_url。代码必须先按 flow_write_code(mode=non_script) 返回的契约生成：业务数据和第三方 API 密钥都从全局 input.<字段> 读取，不得读取 process.env；以顶层 return 返回可 JSON 序列化值；input 参数在此模式会原样成为全局 input。code 与 code_base64 必须且只能提供一个。调用会扣配额、限流、执行安全校验、审计并进入 Web worker lane；只写代码时不要调用，用户明确要求测试/执行时才调用。",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     inputSchema: {
       code: z.string().min(1).optional().describe("UTF-8 JavaScript 源码，与 code_base64 二选一；通常优先直接传 code。"),
@@ -919,6 +951,7 @@ server.registerTool(
   },
   async ({ code, code_base64, input: executionInput, timeout_ms }) => {
     try {
+      assertNoUserEnvironmentAccess(code, code_base64);
       const payload = {
         codebase64: encodeCode(code, code_base64),
         input: executionInput ?? {},
@@ -930,6 +963,7 @@ server.registerTool(
       }, true);
       return result({
         mode: "non_script",
+        execution_url: `${baseUrl}/flow/codeblock`,
         quota_notice: "本次非脚本执行已按普通执行请求处理并扣减配额。",
         response,
       });
