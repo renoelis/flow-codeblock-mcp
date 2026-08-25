@@ -79,8 +79,10 @@
 ## 原生能力和模块
 
 - 优先使用标准 JavaScript、`URL`、`URLSearchParams`、Promise 和原生 `fetch`。
-- 允许的模块以 `modules.json` 为准：`axios`、`cheerio`、`crypto-js`、`csv-parser`、`fast-xml-parser`、`form-data`、`lodash`、`pinyin`、`qs`、`sm-crypto-v2`、`uuid`、`xlsx`、`dayjs`。
-- 使用模块时只能使用单个字符串字面量 `require('模块名')`；禁止动态模块名、间接 `require`、静态/动态 ESM `import/export`。
+- 允许的 npm 模块以 `modules.json` 为准：`axios`、`cheerio`、`csv-parser`、`fast-xml-parser`、`form-data`、`lodash`、`pinyin-pro`、`qs`、`read-excel-file`、`sm-crypto-v2`、`uuid`、`write-excel-file`、`xlsx`、`dayjs`。
+- 使用模块时只能使用单个字符串字面量 `require('模块名')`；`xlsx` 只使用包根入口，另外两个 Excel 包只使用下条列出的 `/universal`、`/node` 和 `/utility` 子路径，禁止其他包子路径、动态模块名、间接 `require`、静态/动态 ESM `import/export`。
+- Excel 文件可通过 `require('read-excel-file/universal')` 读取远程响应的 `Blob` 或 `ArrayBuffer`，通过 `require('write-excel-file/universal')` 的 `.toBlob()` 在内存中生成后直接上传第三方。需要流式处理时使用 `require('read-excel-file/node')` 和 `require('write-excel-file/node')`，将网络响应转换为 Node Readable，或将 `.toStream()` 的只读流转换为 Web `ReadableStream` 后作为 `fetch` 请求体；自定义 `features` 可使用纯内存辅助入口 `require('write-excel-file/utility')`。必须兼容 SheetJS `sheet_to_json({ raw: false })` 的单元格显示格式、旧返回结构或其他 SheetJS API 时，使用 `require('xlsx')`，并继续在内存中处理下载结果。业务代码不得使用文件路径、`.toFile()` 或容器文件系统。日期单元格使用 `Date` 值、`type: Date` 和明确的 `format` 或 `dateFormat`，并显式约定业务时区。
+- 哈希、签名、随机数和对称加密优先使用全局 Web Crypto；需要 MD5 等 Web Crypto 不支持的兼容算法时使用字面量 `require('node:crypto')`，不得生成 `crypto-js` API。
 - 能用原生能力完成时不得引入 npm 包，网络请求默认使用 `fetch`，必须检查 HTTP 状态并处理 JSON、文本和空响应。
 
 ## 禁止能力和异步生命周期
