@@ -127,6 +127,10 @@ describe("MCP tool metadata", () => {
       expect(currentTool?.description, currentToolName).toContain("不接受也不要猜测 version");
     }
 
+    expect(byName.get("flow_get_script")?.description).toContain("MCP 会将 API 返回的 code_base64 解码为 code");
+    expect(byName.get("flow_get_script_version")?.description).toContain("MCP 会将 API 返回的 code_base64 解码为 code");
+    expect(byName.get("flow_token_info")?.description).toContain("token、access_token 等凭据字段会自动脱敏");
+
     for (const historyToolName of ["flow_get_script_version", "flow_get_script_documentation_version"]) {
       const historyTool = byName.get(historyToolName);
       expect(historyTool?.inputSchema.required, historyToolName).toContain("version");

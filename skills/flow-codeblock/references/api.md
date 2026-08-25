@@ -18,7 +18,7 @@
 - 网页测试请求必须带 `x-flow-test-tool: 1`；MCP 脚本执行请求必须带 `X-Flow-Execution-Origin: mcp`。普通 HTTP 请求不带上述标识，进入 Standard lane。
 - MCP 标识始终选择 Web lane；普通 HTTP 请求始终选择 Standard lane。
 
-MCP Server 使用 `FLOW_CODEBLOCK_TOKEN` 调用 API，不对 API 响应中的 Token 做二次脱敏；`flow_token_info` 会返回当前 Token 的完整元数据。请由 MCP 客户端负责保护会话历史和调试输出。
+MCP Server 使用 `FLOW_CODEBLOCK_TOKEN` 调用 API。MCP 工具 JSON 出参会递归脱敏 `token`、`access_token`、`authorization`、`refresh_token`、`qingcodeToken` 等凭据字段，保留首 4 位和末 4 位；`token_cache`、`unique_tokens` 等统计字段不属于凭据字段。`flow_token_info` 因此不会向大模型返回完整 Token。请求认证仍由 MCP Server 内部使用环境变量完成。
 
 ## 通用约定
 - `Content-Type: application/json`。

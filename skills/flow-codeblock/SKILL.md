@@ -18,7 +18,9 @@ description: 使用 Flow Codeblock MCP 工具写出非脚本代码或创建、�
 
 凡是写代码或实现接口，先调用 `flow_write_code` 并选择模式。
 
-读取脚本时，当前版本使用 `flow_get_script`，只传 `script_id`，MCP 会固定向 API 附加 `version=0` 标识当前版本；只有用户明确要求某个具体历史版本时才使用 `flow_get_script_version`，并传入用户指定或 `available_versions` 中已有的版本号，不得猜测。接口文档的当前版本和历史版本分别使用 `flow_get_script_documentation` 与 `flow_get_script_documentation_version`，不得猜测文档版本。
+读取脚本时，当前版本使用 `flow_get_script`，只传 `script_id`，MCP 会固定向 API 附加 `version=0` 标识当前版本，并把详情中的 `code_base64` 解码为 UTF-8 `code` 返回；只有用户明确要求某个具体历史版本时才使用 `flow_get_script_version`，并传入用户指定或 `available_versions` 中已有的版本号，不得猜测。历史版本工具同样返回解码后的 `code`；无法严格解码时保留原始 `code_base64`。接口文档的当前版本和历史版本分别使用 `flow_get_script_documentation` 与 `flow_get_script_documentation_version`，不得猜测文档版本。
+
+MCP 所有工具的 JSON 出参都会递归脱敏 `token`、`access_token`、`authorization`、`refresh_token`、`qingcodeToken` 等凭据字段，保留首 4 位和末 4 位；`token_cache`、`unique_tokens` 等统计字段不属于凭据字段。
 
 ### `non_script`
 

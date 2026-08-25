@@ -54,11 +54,50 @@ class ApiError extends Error {
 }
 
 function jsonText(value: unknown): string {
-  return JSON.stringify(value, null, 2);
+  return JSON.stringify(redactTokenFields(value), null, 2);
 }
 
 function result(value: unknown) {
   return { content: [{ type: "text" as const, text: jsonText(value) }] };
+}
+
+const sensitiveTokenKeys = new Set([
+  "accesstoken",
+  "authorization",
+  "flowpagesession",
+  "flowverifysession",
+  "idtoken",
+  "qingcodetoken",
+  "refreshtoken",
+  "token",
+  "tokenvalue",
+]);
+
+function isSensitiveTokenKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[-_]/g, "");
+  return sensitiveTokenKeys.has(normalized) || normalized.endsWith("token");
+}
+
+function redactToken(value: unknown): unknown {
+  if (typeof value === "string") {
+    if (value.length <= 8) return "***";
+    return `${value.slice(0, 4)}***${value.slice(-4)}`;
+  }
+  if (Array.isArray(value)) return value.map((item) => redactToken(item));
+  if (value && typeof value === "object") return redactTokenFields(value);
+  return value;
+}
+
+function redactTokenFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => redactTokenFields(item));
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [
+      key,
+      isSensitiveTokenKey(key) ? redactToken(nestedValue) : redactTokenFields(nestedValue),
+    ]),
+  );
 }
 
 function cleanHeaders(headers: Record<string, string> | undefined): Record<string, string> {
@@ -120,6 +159,44 @@ function encodeCode(code: string | undefined, codeBase64: string | undefined): s
     throw new Error("Provide exactly one of code or code_base64");
   }
   return codeBase64 ?? Buffer.from(code!, "utf8").toString("base64");
+}
+
+function decodeScriptCode(value: string): string | undefined {
+  const normalized = value.replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized) || normalized.length % 4 === 1) return undefined;
+
+  const bytes = Buffer.from(normalized, "base64");
+  const canonical = bytes.toString("base64").replace(/=+$/, "");
+  if (canonical !== normalized.replace(/=+$/, "")) return undefined;
+
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return undefined;
+  }
+}
+
+function decodeScriptReadResponse(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const response = payload as Record<string, unknown>;
+  const data = response.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return payload;
+  const dataRecord = data as Record<string, unknown>;
+  const collectionKey = ["data", "scripts"].find((key) => Array.isArray(dataRecord[key]));
+  if (!collectionKey) return payload;
+  const versions = dataRecord[collectionKey] as unknown[];
+
+  const decodedVersions = versions.map((version) => {
+    if (!version || typeof version !== "object" || Array.isArray(version)) return version;
+    const versionRecord = version as Record<string, unknown>;
+    if (typeof versionRecord.code_base64 !== "string") return version;
+    const code = decodeScriptCode(versionRecord.code_base64);
+    if (code === undefined) return version;
+    const { code_base64: _codeBase64, ...decodedVersion } = versionRecord;
+    return { ...decodedVersion, code };
+  });
+
+  return { ...response, data: { ...dataRecord, [collectionKey]: decodedVersions } };
 }
 
 function removeCreatePath(document: unknown): unknown {
@@ -200,6 +277,8 @@ const serverInstructions = [
   "非脚本模式：代码读取全局 input.<字段>；只写代码时不要执行，用户要求测试时调用 flow_execute_code。",
   "脚本模式：代码读取 input.query/input.header/input.body/input.cookies；调用方 POST 时直接发送业务 JSON，不包装 input 或 input.body。创建或修改代码时必须同时生成完整 interface_doc。",
   "读取当前脚本使用 flow_get_script 且只传 script_id，MCP 会固定以 version=0 标识当前版本；只有用户明确要求具体历史版本时才使用 flow_get_script_version。不得猜测 version，接口文档版本也不得猜测。",
+  "flow_get_script 和 flow_get_script_version 会把脚本详情中的 code_base64 解码为 UTF-8 code 返回；严格解码失败时保留原始 code_base64。",
+  "所有工具 JSON 出参会递归脱敏 token、access_token、authorization、refresh_token、qingcodeToken 等凭据字段；统计字段 token_cache、unique_tokens 不会被误处理。",
   "释放所有权时先调用 flow_request_script_owner_challenge(action=release)，再使用同一脚本、邮箱和验证码调用 flow_release_script_ownership；脚本必须已解锁。",
   "任何脚本变更都先调用 flow_preview_script_change；只有向用户展示预览且获得明确确认后，才调用 flow_apply_script_change。不得把用户要求预览或修改视为发布确认。",
   "MCP 不提供删除工具。遇到删除请求必须拒绝调用其他工具替代删除，并告知用户通过 Flow Codeblock 网页或 REST DELETE /flow/scripts/{scriptId} 自行删除。",
@@ -207,7 +286,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.18" },
+  { name: "flow-codeblock", version: "0.2.19" },
   { instructions: serverInstructions },
 );
 
@@ -238,7 +317,7 @@ server.registerTool(
   "flow_token_info",
   {
     title: "查询当前 Token 信息",
-    description: "只读查询 MCP 环境变量 FLOW_CODEBLOCK_TOKEN 对应的状态、元数据、执行配额、过期时间和脚本额度。无需参数；不要让用户把 token 作为工具参数重复传入。",
+    description: "只读查询 MCP 环境变量 FLOW_CODEBLOCK_TOKEN 对应的状态、元数据、执行配额、过期时间和脚本额度。返回中的 token、access_token 等凭据字段会自动脱敏。无需参数；不要让用户把 token 作为工具参数重复传入。",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {},
   },
@@ -277,7 +356,7 @@ server.registerTool(
       if (sort !== undefined) query.set("sort", sort);
       if (order !== undefined) query.set("order", order);
       const payload = await apiRequest(`/flow/scripts${query.size ? `?${query}` : ""}`);
-      return result(payload);
+      return result(decodeScriptReadResponse(payload));
     } catch (error) {
       return apiError(error);
     }
@@ -288,7 +367,7 @@ server.registerTool(
   "flow_get_script",
   {
     title: "读取当前脚本详情",
-    description: "只读查询当前 token 名下一个脚本的当前版本，包括代码、描述、IP 白名单、锁定状态、current_version 和可用版本。调用方只需传 script_id，不接受也不要猜测 version；MCP 请求 API 时会固定附加 version=0，明确标识当前版本。准备更新时必须先调用，并使用响应中的 current_version 作为预览的 expected_version。需要历史版本时改用 flow_get_script_version。",
+    description: "只读查询当前 token 名下一个脚本的当前版本，包括 UTF-8 解码后的代码、描述、IP 白名单、锁定状态、current_version 和可用版本。MCP 会将 API 返回的 code_base64 解码为 code；无法严格解码时保留原始字段。调用方只需传 script_id，不接受也不要猜测 version；MCP 请求 API 时会固定附加 version=0，明确标识当前版本。准备更新时必须先调用，并使用响应中的 current_version 作为预览的 expected_version。需要历史版本时改用 flow_get_script_version。",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       script_id: z.string().min(1).describe("目标脚本 ID；来自 flow_list_scripts、创建结果或用户明确提供的 ID。"),
@@ -296,7 +375,7 @@ server.registerTool(
   },
   async ({ script_id }) => {
     try {
-      return result(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}?version=0`));
+      return result(decodeScriptReadResponse(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}?version=0`)));
     } catch (error) {
       return apiError(error);
     }
@@ -307,7 +386,7 @@ server.registerTool(
   "flow_get_script_version",
   {
     title: "读取历史脚本版本",
-    description: "只读查询当前 token 名下一个脚本的指定历史版本，包括代码、描述、IP 白名单、锁定状态、current_version 和可用版本。仅当用户明确要求查看某个具体历史版本时调用；version 必须来自用户要求或已读取的 available_versions，不得猜测。历史版本不能用于更新。",
+    description: "只读查询当前 token 名下一个脚本的指定历史版本，包括 UTF-8 解码后的代码、描述、IP 白名单、锁定状态、current_version 和可用版本。MCP 会将 API 返回的 code_base64 解码为 code；无法严格解码时保留原始字段。仅当用户明确要求查看某个具体历史版本时调用；version 必须来自用户要求或已读取的 available_versions，不得猜测。历史版本不能用于更新。",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       script_id: z.string().min(1).describe("目标脚本 ID；来自脚本列表、当前脚本详情或用户明确提供的 ID。"),
@@ -316,9 +395,9 @@ server.registerTool(
   },
   async ({ script_id, version }) => {
     try {
-      return result(await apiRequest(
+      return result(decodeScriptReadResponse(await apiRequest(
         `/flow/scripts/${encodeURIComponent(script_id)}?version=${encodeURIComponent(String(version))}`,
-      ));
+      )));
     } catch (error) {
       return apiError(error);
     }
