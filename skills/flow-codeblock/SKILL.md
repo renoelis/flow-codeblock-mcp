@@ -18,6 +18,8 @@ description: 使用 Flow Codeblock MCP 工具写出非脚本代码或创建、�
 
 凡是写代码或实现接口，先调用 `flow_write_code` 并选择模式。
 
+读取脚本时，当前版本使用 `flow_get_script`，只传 `script_id`；只有用户明确要求某个具体历史版本时才使用 `flow_get_script_version`，并传入用户指定或 `available_versions` 中已有的版本号，不得猜测。接口文档的当前版本和历史版本分别使用 `flow_get_script_documentation` 与 `flow_get_script_documentation_version`，规则相同。
+
 ### `non_script`
 
 只生成 JavaScript 和 `POST /flow/codeblock` 调用规则，不创建脚本。请求体中的 `input` 是业务对象本身，代码使用 `input.<字段>`。
@@ -32,7 +34,7 @@ description: 使用 Flow Codeblock MCP 工具写出非脚本代码或创建、�
 
 创建或更新代码的流程：
 
-1. 生成代码和完整接口文档；更新前先用 `flow_get_script` 读取当前版本。
+1. 生成代码和完整接口文档；更新前先用 `flow_get_script` 读取当前版本，只传 `script_id`。
 2. 调用 `flow_preview_script_change`。创建不带 `script_id`；更新带 `script_id` 和 `expected_version`。更新预览会先确认脚本存在且版本未变化；404 或版本冲突时停止并重新读取，不得继续发布。
 3. 展示预览结果。只有用户明确确认后，才调用 `flow_apply_script_change`，传 `preview_id` 和 `confirm: true`。
 4. 创建成功后调用 `flow_execute_script`，其 `body` 参数直接传业务 JSON，报告执行和配额结果。

@@ -199,13 +199,14 @@ const serverInstructions = [
   "Flow Codeblock MCP 可独立使用，不依赖 Skill。写代码前先调用 flow_write_code 获取对应模式的完整代码与输入契约。",
   "非脚本模式：代码读取全局 input.<字段>；只写代码时不要执行，用户要求测试时调用 flow_execute_code。",
   "脚本模式：代码读取 input.query/input.header/input.body/input.cookies；调用方 POST 时直接发送业务 JSON，不包装 input 或 input.body。创建或修改代码时必须同时生成完整 interface_doc。",
+  "读取当前脚本使用 flow_get_script 且只传 script_id；只有用户明确要求具体历史版本时才使用 flow_get_script_version。接口文档读取同理，不得猜测 version。",
   "任何脚本变更都先调用 flow_preview_script_change；只有向用户展示预览且获得明确确认后，才调用 flow_apply_script_change。不得把用户要求预览或修改视为发布确认。",
   "MCP 不提供删除工具。遇到删除请求必须拒绝调用其他工具替代删除，并告知用户通过 Flow Codeblock 网页或 REST DELETE /flow/scripts/{scriptId} 自行删除。",
   "读取当前版本后再更新；版本冲突、404、锁定、限流、配额或校验失败时根据错误处理，不要用反复试调用探测参数。",
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.9" },
+  { name: "flow-codeblock", version: "0.2.10" },
   { instructions: serverInstructions },
 );
 
@@ -285,20 +286,38 @@ server.registerTool(
 server.registerTool(
   "flow_get_script",
   {
-    title: "读取脚本详情",
-    description: "只读查询当前 token 名下一个脚本的当前或指定历史版本，包括代码、描述、IP 白名单、锁定状态、current_version 和可用版本。准备更新时必须先调用且省略 version，以其 current_version 作为预览的 expected_version；历史版本只读。",
+    title: "读取当前脚本详情",
+    description: "只读查询当前 token 名下一个脚本的当前版本，包括代码、描述、IP 白名单、锁定状态、current_version 和可用版本。只需传 script_id，不接受也不要猜测 version。准备更新时必须先调用，并使用响应中的 current_version 作为预览的 expected_version。需要历史版本时改用 flow_get_script_version。",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       script_id: z.string().min(1).describe("目标脚本 ID；来自 flow_list_scripts、创建结果或用户明确提供的 ID。"),
-      version: z.number().int().positive().optional().describe(
-        "可选，默认省略。省略时查询脚本当前版本；仅在需要查看指定历史版本时传入对应版本号。准备更新时必须省略，并使用响应中的 current_version 作为 expected_version。",
-      ),
+    },
+  },
+  async ({ script_id }) => {
+    try {
+      return result(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}`));
+    } catch (error) {
+      return apiError(error);
+    }
+  },
+);
+
+server.registerTool(
+  "flow_get_script_version",
+  {
+    title: "读取历史脚本版本",
+    description: "只读查询当前 token 名下一个脚本的指定历史版本，包括代码、描述、IP 白名单、锁定状态、current_version 和可用版本。仅当用户明确要求查看某个具体历史版本时调用；version 必须来自用户要求或已读取的 available_versions，不得猜测。历史版本不能用于更新。",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    inputSchema: {
+      script_id: z.string().min(1).describe("目标脚本 ID；来自脚本列表、当前脚本详情或用户明确提供的 ID。"),
+      version: z.number().int().positive().describe("要读取的明确历史版本号；必须来自用户要求或 available_versions，不得自行猜测。"),
     },
   },
   async ({ script_id, version }) => {
     try {
-      const query = version === undefined ? "" : `?version=${encodeURIComponent(String(version))}`;
-      return result(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}${query}`));
+      return result(await apiRequest(
+        `/flow/scripts/${encodeURIComponent(script_id)}?version=${encodeURIComponent(String(version))}`,
+      ));
     } catch (error) {
       return apiError(error);
     }
@@ -308,18 +327,38 @@ server.registerTool(
 server.registerTool(
   "flow_get_script_documentation",
   {
-    title: "读取脚本接口文档",
-    description: "只读查询脚本当前或指定历史版本的 script-interface-doc.v1。修改代码或文档前先读取当前文档，保留仍然有效的字段并与新代码同步；未保存文档时 document 可能为 null。历史文档只读。",
+    title: "读取当前脚本接口文档",
+    description: "只读查询脚本当前版本的 script-interface-doc.v1。只需传 script_id，不接受也不要猜测 version。修改代码或文档前先读取当前文档，保留仍然有效的字段并与新代码同步；未保存文档时 document 可能为 null。需要历史文档时改用 flow_get_script_documentation_version。",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       script_id: z.string().min(1).describe("目标脚本 ID；来自脚本列表、创建结果或用户明确提供的 ID。"),
-      version: z.number().int().positive().optional().describe("可选历史版本号；省略则读取当前版本文档。"),
+    },
+  },
+  async ({ script_id }) => {
+    try {
+      return result(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}/documentation`));
+    } catch (error) {
+      return apiError(error);
+    }
+  },
+);
+
+server.registerTool(
+  "flow_get_script_documentation_version",
+  {
+    title: "读取历史脚本接口文档",
+    description: "只读查询脚本指定历史版本的 script-interface-doc.v1。仅当用户明确要求查看某个具体历史版本的接口文档时调用；version 必须来自用户要求或已读取的 available_versions，不得猜测。未保存文档时 document 可能为 null，历史文档不能用于更新。",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    inputSchema: {
+      script_id: z.string().min(1).describe("目标脚本 ID；来自脚本列表、当前脚本详情或用户明确提供的 ID。"),
+      version: z.number().int().positive().describe("要读取文档的明确历史版本号；必须来自用户要求或 available_versions，不得自行猜测。"),
     },
   },
   async ({ script_id, version }) => {
     try {
-      const query = version === undefined ? "" : `?version=${encodeURIComponent(String(version))}`;
-      return result(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}/documentation${query}`));
+      return result(await apiRequest(
+        `/flow/scripts/${encodeURIComponent(script_id)}/documentation?version=${encodeURIComponent(String(version))}`,
+      ));
     } catch (error) {
       return apiError(error);
     }

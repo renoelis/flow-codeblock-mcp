@@ -9,6 +9,8 @@ const expectedToolNames = [
   "flow_execute_script",
   "flow_get_script",
   "flow_get_script_documentation",
+  "flow_get_script_documentation_version",
+  "flow_get_script_version",
   "flow_list_scripts",
   "flow_lock_script",
   "flow_preview_script_change",
@@ -49,6 +51,7 @@ describe("MCP tool metadata", () => {
     expect(instructions).toContain("不依赖 Skill");
     expect(instructions).toContain("先调用 flow_preview_script_change");
     expect(instructions).toContain("MCP 不提供删除工具");
+    expect(instructions).toContain("不得猜测 version");
     expect(tools.map((tool) => tool.name).sort()).toEqual(expectedToolNames);
     expect(tools.some((tool) => tool.name.includes("delete"))).toBe(false);
   });
@@ -109,13 +112,18 @@ describe("MCP tool metadata", () => {
     expect(byName.get("flow_preview_script_change")?.description).toContain("ip_whitelist=null 或 [] 表示清除");
     expect(byName.get("flow_apply_script_change")?.description).toContain("用户随后明确确认发布");
 
-    const getScriptVersion = byName.get("flow_get_script")?.inputSchema.properties?.version as
-      | { description?: string }
-      | undefined;
-    expect(getScriptVersion?.description).toContain("可选，默认省略");
-    expect(getScriptVersion?.description).toContain("省略时查询脚本当前版本");
-    expect(getScriptVersion?.description).toContain("仅在需要查看指定历史版本时传入");
-    expect(getScriptVersion?.description).toContain("current_version 作为 expected_version");
+    for (const currentToolName of ["flow_get_script", "flow_get_script_documentation"]) {
+      const currentTool = byName.get(currentToolName);
+      expect(Object.keys(currentTool?.inputSchema.properties ?? {}), currentToolName).toEqual(["script_id"]);
+      expect(currentTool?.description, currentToolName).toContain("不接受也不要猜测 version");
+    }
+
+    for (const historyToolName of ["flow_get_script_version", "flow_get_script_documentation_version"]) {
+      const historyTool = byName.get(historyToolName);
+      expect(historyTool?.inputSchema.required, historyToolName).toContain("version");
+      expect(historyTool?.description, historyToolName).toContain("仅当用户明确要求");
+      expect(historyTool?.description, historyToolName).toContain("不得猜测");
+    }
 
     const interfaceDoc = byName.get("flow_preview_script_change")?.inputSchema.properties?.interface_doc as
       | { description?: string }
