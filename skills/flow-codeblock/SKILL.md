@@ -56,11 +56,11 @@ MCP 预览使用严格完整性门禁。文档必须与代码行为一致，并�
 
 嵌套 Schema 和示例必须先自行递归检查一次，通过后再调用预览；不得依靠连续预览逐项发现缺失字段：
 
-- 请求体或响应体的根 Schema 节点必须填写 `type`；其所有嵌套 Schema 节点（包括 `properties` 字段、数组的 `items`、`additionalProperties` 值 Schema）都必须填写 `type/description/example`；固定字段对象必须有完整 `properties`；动态键字典可使用 `additionalProperties` 描述完整的值 Schema；二者不能同时缺失；
+- 请求体或响应体的根 Schema 节点必须填写 `type`；其所有嵌套 Schema 节点（包括 `properties` 字段、数组的 `items`、`additionalProperties` 值 Schema）都必须填写 `type/description/example`；代码或 `example` 中键名已知的对象必须用完整 `properties`，只有键名运行时才确定且所有值结构相同的动态字典才能用 `additionalProperties` 描述单个值 Schema；不得用 `type: "object"`、`example: {}` 的 `additionalProperties` 兜底任意 JSON 值；
 - 每个 `type: "array"` 必须有 `items`，且 `items` 本身也必须填写 `type/description/example`；对象数组还必须有完整 `items.properties`；
 - 数组值中的每个对象都必须包含 `items.properties` 的全部字段；
-- 任意层级示例中出现的字段必须有对应 `properties` 或 `additionalProperties`；列入 `required` 的字段必须出现在示例中，运行时可选字段可以省略；
-- JSON Schema 的 `required` 只声明运行时真正必填的业务字段；成功、错误结构不同应拆成不同 `responses`。
+- 任意层级示例中出现的字段必须有对应 `properties` 或 `additionalProperties`，且示例的 JSON 类型必须与 `type` 一致；列入 `required` 的字段必须出现在示例中，运行时可选字段可以省略；
+- JSON Schema 的 `required` 只声明运行时真正必填的业务字段；成功、错误结构不同应拆成不同 `responses`，同一状态码下不同错误结构也应拆开描述。
 
 `responses/logic_description` 必须放在 `interface_doc` 根对象内，不能放在 `flow_preview_script_change` 的工具参数层；请求体和每个响应的完整 `example` 与 `schema` 同级，`request.example` 应写成 `request.body.example`，`properties/required/items/additionalProperties` 放在 `schema` 内。MCP 会在预览前兼容纠正这些无歧义的位置错误，从父级示例或同名蛇形/驼峰别名补全可推导的节点示例，并移除 `usage_refs` 中无效的非对象条目；预览成功时通过 `interface_doc_normalizations` 返回修正记录，仍有错误时在错误文本的“本次已自动规范化”中返回。必须保留原文档及所有未报错字段，只修正错误列表中的准确路径；不得重写整份文档或删除 `responses`、`logic_description`、`request`。
 

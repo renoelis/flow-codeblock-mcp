@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { interfaceDocCompletenessIssues, normalizeInterfaceDocument } from "./interface-doc";
+import {
+  assertCompleteInterfaceDoc,
+  interfaceDocCompletenessIssues,
+  normalizeInterfaceDocument,
+} from "./interface-doc";
 
 function field(type: string, description: string, example: unknown) {
   return { type, description, example };
@@ -101,6 +105,30 @@ describe("interfaceDocCompletenessIssues", () => {
       example: 1,
     };
     expect(interfaceDocCompletenessIssues(document, "create")).toEqual([]);
+  });
+
+  test("deduplicates invalid additionalProperties errors and gives a targeted repair rule", () => {
+    const document = completePostDocument();
+    document.request.body.schema.properties.detail = {
+      type: "object",
+      description: "订单详情",
+      example: { invoice_id: "INV-001", note: "测试订单" },
+      additionalProperties: {
+        type: "object",
+        description: "任意详情字段",
+        example: {},
+      },
+    };
+    document.request.body.example.detail = { invoice_id: "INV-001", note: "测试订单" };
+
+    const issues = interfaceDocCompletenessIssues(document, "create");
+    const additionalPropertiesIssues = issues.filter((issue) => (
+      issue.includes("properties.detail.additionalProperties 必须使用 properties")
+    ));
+    expect(additionalPropertiesIssues).toHaveLength(1);
+    expect(() => assertCompleteInterfaceDoc(document, "create")).toThrow(
+      "错误路径以 .additionalProperties 结尾且父对象键名已知时，应修正父对象的 properties",
+    );
   });
 
   test("normalizes misplaced schema fields and promotes schema root examples", () => {

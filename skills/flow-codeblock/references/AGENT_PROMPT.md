@@ -56,10 +56,11 @@
 - 查询参数、请求头和请求体字段只有实际存在时才填写，并必须有名称、类型、描述和具体值；参数保留 `required` 表示运行时是否必填。
 - 需要描述 POST 请求体时填写 `content_type/schema/example`；每个响应必填 `status/description/content_type/schema/example`。
 - 响应 Schema 中每个字段必须填写 `type/description/example`；字段名称由 `properties` 的键表达。
-- 请求体或响应体的根 Schema 节点必须填写 `type`；其所有嵌套 Schema 节点（包括 `properties` 字段、数组的 `items`、`additionalProperties` 值 Schema）都必须填写 `type/description/example`；固定字段对象必须有完整 `properties`；动态键字典必须用 `additionalProperties` 描述值 Schema。
+- 请求体或响应体的根 Schema 节点必须填写 `type`；其所有嵌套 Schema 节点（包括 `properties` 字段、数组的 `items`、`additionalProperties` 值 Schema）都必须填写 `type/description/example`。
+- 代码或 `example` 中键名已知的对象必须用 `properties` 逐项描述；`additionalProperties` 只用于键名运行时才确定且所有值结构相同的动态字典，并描述单个动态值的完整 Schema。不得用 `additionalProperties: {"type":"object","example":{}}` 表示“允许任意 JSON 值”，也不得在校验报错后继续嵌套同样的空对象 Schema。
 - 每个数组必须有 `items`，且 `items` 本身也必须填写 `type/description/example`；`items.type=object` 时还必须有完整 `items.properties`，数组值中的每个对象必须覆盖全部字段。
-- 请求体和响应体任意层级的示例中，出现的字段必须有对应 `properties` 或 `additionalProperties`；列入 `required` 的字段必须出现在示例中，运行时可选字段可以省略。
-- JSON Schema 的 `required` 只写运行时真正必填的业务字段；成功和错误结构不同应拆成不同响应。
+- 请求体和响应体任意层级的示例中，出现的字段必须有对应 `properties` 或 `additionalProperties`，并且示例的 JSON 类型必须与对应 `type` 一致；列入 `required` 的字段必须出现在示例中，运行时可选字段可以省略。
+- JSON Schema 的 `required` 只写运行时真正必填的业务字段；成功和错误结构不同应拆成不同响应，同一状态码下字符串错误与对象错误等不同结构也应拆开描述。
 - `logic_description` 必须具体说明请求字段、校验、处理步骤、是否调用外部接口、成功响应和错误分支。
 - 文档面向调用方，只写查询参数、请求头、请求体和 Cookie；不得出现 `input.query`、`input.header`、`input.body`、`input.cookies` 等内部结构。调用方 POST 业务 JSON 直接放请求体，不包装为 `input`。
 - `usage_refs` 可省略，仅有真实应用引用时填写 `{app_name,app_id?,location?,note?}` 对象数组；安全提示和普通说明写入 `logic_description`，不得把字符串数组放入 `usage_refs`。

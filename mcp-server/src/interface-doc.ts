@@ -17,15 +17,17 @@ export const interfaceDocRequiredFields = {
 
 export const interfaceDocNestedRules = [
   "请求体或响应体的根 Schema 节点必须填写 type；其所有嵌套 Schema 节点（包括 properties 字段、array.items 和 additionalProperties 的值 Schema）都必须填写 type、description 和 example。",
-  "固定字段对象必须有 properties，并为每个字段填写名称、type、description、example；动态键字典必须用 additionalProperties 描述完整的值 Schema；二者不能同时缺失。",
+  "代码或 example 中键名已知的对象必须用 properties 逐项描述；additionalProperties 仅用于键名运行时才确定且所有值结构相同的动态字典，并描述单个动态值的完整 Schema。不得用 type=object、example={} 的 additionalProperties 作为任意 JSON 值的兜底。",
   "每个 type=array 都必须有 items，且 items 本身必须填写 type、description 和 example；items.type=object 时还必须有完整 items.properties。数组 example 中的每个对象都必须覆盖 items.properties 的全部字段。",
-  "任意层级 example 中出现的字段必须有对应 properties 或 additionalProperties；properties 中列入 required 的字段必须出现在 example 中，运行时可选字段可以省略。",
+  "任意层级 example 中出现的字段必须有对应 properties 或 additionalProperties，且 example 的 JSON 类型必须与 type 一致；properties 中列入 required 的字段必须出现在 example 中，运行时可选字段可以省略。",
   "JSON Schema 的 required 只表示运行时真正必填的业务字段；成功和错误结构不同应拆成不同 responses。",
 ];
 
 export const interfaceDocRepairRules = [
   "保留原 interface_doc 中未报错的字段，只修正错误列表指出的路径；不要为了修复单个字段而重写或删减 responses、logic_description 或 request。",
   "responses 和 logic_description 属于 interface_doc 根对象，request.body.example 与 schema 同级，properties、required、items、additionalProperties 属于 schema。MCP 会兼容纠正常见错位、从父级或同名蛇形/驼峰别名补全可推导的节点 example，并移除 usage_refs 中无效的非对象说明。",
+  "对象字段已能从代码或 example 确定时，在该对象上使用 properties 逐项描述；只有键名未知且每个动态值都符合同一 Schema 时才使用 additionalProperties。错误路径以 .additionalProperties 结尾且父对象键名已知时，应修正父对象的 properties，不要继续嵌套空 additionalProperties。",
+  "每个 example 的类型必须与对应 type 一致；同一状态码存在字符串错误和对象错误等不同结构时，拆成多个 responses 分别描述。",
 ];
 
 export const interfaceDocInputDescription = [
@@ -528,7 +530,7 @@ export function interfaceDocCompletenessIssues(
     });
   }
 
-  return issues;
+  return [...new Set(issues)];
 }
 
 export function assertCompleteInterfaceDoc(document: unknown, operation: "create" | "update"): void {

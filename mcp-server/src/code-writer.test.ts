@@ -26,6 +26,14 @@ describe("codeWriterContext", () => {
     expect(JSON.stringify(context)).toContain("/flow/codeblock/{{脚本ID}}");
   });
 
+  test("distinguishes fixed objects from homogeneous dynamic dictionaries", () => {
+    const context = codeWriterContext("script", "创建包含嵌套对象的接口");
+    const rules = objectField(context, "authoritative_rules");
+    expect(rules.content).toContain("键名已知的对象必须用 `properties`");
+    expect(rules.content).toContain("不得用 `additionalProperties: {\"type\":\"object\",\"example\":{}}`");
+    expect(rules.content).toContain("同一状态码下字符串错误与对象错误等不同结构也应拆开描述");
+  });
+
   test("returns AGENT_PROMPT.md verbatim as the authoritative rule source", async () => {
     const expectedPrompt = await Bun.file(new URL("AGENT_PROMPT.md", referencesDirectory)).text();
     const context = codeWriterContext("non_script", "处理输入");

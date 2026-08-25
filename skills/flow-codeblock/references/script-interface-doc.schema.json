@@ -82,9 +82,9 @@
         "type": {"type": "string", "minLength": 1},
         "description": {"type": "string", "minLength": 1},
         "example": {},
-        "properties": {"type": "object", "additionalProperties": {"$ref": "#/$defs/schema_node"}},
+        "properties": {"type": "object", "description": "代码或 example 中键名已知时必须逐项填写，每个值为完整 schema_node。", "additionalProperties": {"$ref": "#/$defs/schema_node"}},
         "items": {"$ref": "#/$defs/schema_node"},
-        "additionalProperties": {"anyOf": [{"$ref": "#/$defs/schema_node"}, {"type": "boolean"}]},
+        "additionalProperties": {"description": "仅用于键名运行时才确定且所有值结构相同的动态字典；对象值仍须完整描述其 properties，不得用空 object Schema 兜底任意 JSON 值。", "anyOf": [{"$ref": "#/$defs/schema_node"}, {"type": "boolean"}]},
         "required": {"type": "array", "items": {"type": "string"}}
       },
       "additionalProperties": true
@@ -96,9 +96,9 @@
         "type": {"type": "string", "minLength": 1},
         "description": {"type": "string", "minLength": 1},
         "example": {},
-        "properties": {"type": "object", "additionalProperties": {"$ref": "#/$defs/schema_node"}},
+        "properties": {"type": "object", "description": "代码或 example 中键名已知时必须逐项填写，每个值为完整 schema_node。", "additionalProperties": {"$ref": "#/$defs/schema_node"}},
         "items": {"$ref": "#/$defs/schema_node"},
-        "additionalProperties": {"anyOf": [{"$ref": "#/$defs/schema_node"}, {"type": "boolean"}]},
+        "additionalProperties": {"description": "仅用于键名运行时才确定且所有值结构相同的动态字典；对象值仍须完整描述其 properties，不得用空 object Schema 兜底任意 JSON 值。", "anyOf": [{"$ref": "#/$defs/schema_node"}, {"type": "boolean"}]},
         "required": {"type": "array", "items": {"type": "string"}}
       },
       "additionalProperties": true
