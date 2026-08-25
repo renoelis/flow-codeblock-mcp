@@ -1,0 +1,63 @@
+name: Publish flow-codeblock-mcp
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "package.json"
+      - "README.md"
+      - ".mcp.json"
+      - ".codex-plugin/**"
+      - "mcp-server/**"
+      - "skills/**"
+      - ".github/workflows/publish.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install pinned Bun runtime
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Install MCP server dependencies
+        run: bun install --cwd mcp-server --frozen-lockfile
+
+      - name: Run MCP tests
+        run: bun test mcp-server/src
+
+      - name: Configure npm authentication
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish version when needed
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          package_name="$(node -p "require('./package.json').name")"
+          package_version="$(node -p "require('./package.json').version")"
+
+          if npm view "${package_name}@${package_version}" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "${package_name}@${package_version} is already published; skipping."
+            exit 0
+          fi
+
+          npm publish --access public --registry=https://registry.npmjs.org
+
+      - name: Report missing npm credentials
+        if: ${{ secrets.NPM_TOKEN == '' }}
+        run: echo "NPM_TOKEN is not configured; tests passed and npm publish was skipped."
