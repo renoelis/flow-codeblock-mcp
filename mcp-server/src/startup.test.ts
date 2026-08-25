@@ -32,4 +32,22 @@ describe("MCP startup configuration", () => {
     expect(processResult.exitCode).not.toBe(0);
     expect(processResult.stderr.toString()).toContain("FLOW_CODEBLOCK_OWNER_EMAIL must be a valid email address");
   });
+
+  test("rejects an invalid FLOW_CODEBLOCK_OWNER_NAME", () => {
+    const environment = {
+      ...process.env,
+      FLOW_CODEBLOCK_BASE_URL: "http://127.0.0.1:1",
+      FLOW_CODEBLOCK_TOKEN: "flow_test",
+      FLOW_CODEBLOCK_OWNER_NAME: "x".repeat(101),
+    };
+    const processResult = Bun.spawnSync({
+      cmd: [process.execPath, "run", "src/index.ts"],
+      cwd: import.meta.dir.replace(/\/src$/, ""),
+      env: environment,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(processResult.exitCode).not.toBe(0);
+    expect(processResult.stderr.toString()).toContain("FLOW_CODEBLOCK_OWNER_NAME must be 1-100 characters after trimming");
+  });
 });

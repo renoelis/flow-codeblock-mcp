@@ -7,7 +7,7 @@ Flow Codeblock 的本地 stdio MCP Server 与 Codex Skill。MCP 只调用 Flow C
 需要 Bun 1.4.0 或更高版本：
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.2.32
+bunx --bun flow-codeblock-mcp@0.2.33
 ```
 
 必须配置：
@@ -17,11 +17,15 @@ FLOW_CODEBLOCK_BASE_URL=https://qingcode.oalite.com
 FLOW_CODEBLOCK_TOKEN=flow_xxx
 # 可选：所有权认领、锁定、解锁、释放及转移授权工具的默认邮箱
 FLOW_CODEBLOCK_OWNER_EMAIL=owner@example.com
+# 可选：首次锁定/认领脚本时的默认所有者姓名
+FLOW_CODEBLOCK_OWNER_NAME=Default Owner
 ```
 
 `FLOW_CODEBLOCK_BASE_URL` 是已部署的 Flow Codeblock Rust API 地址，也是代码调用地址的基址。非脚本工具会返回 `${FLOW_CODEBLOCK_BASE_URL}/flow/codeblock` 形式的 `execution_url`；脚本创建、更新和执行工具会返回 `${FLOW_CODEBLOCK_BASE_URL}/flow/codeblock/{script_id}` 形式的 `script_url`，无需再向用户询问域名。其他管理工具不额外附加调用地址。公网服务使用 `https://qingcode.oalite.com`；仅当用户在本机部署 Rust 服务时才改为对应的 localhost 地址。Token 应使用客户端的环境变量或密钥配置，不要写入提示词、工具参数或公开文件。
 
 `FLOW_CODEBLOCK_OWNER_EMAIL` 是可选的默认脚本所有者邮箱。配置后，`flow_request_script_owner_challenge`、`flow_lock_script`、`flow_unlock_script`、`flow_release_script_ownership` 和 `flow_start_ownership_transfer` 的当前所有者邮箱参数可以省略，MCP 会使用该变量；显式传入的邮箱优先。所有权转移确认中的新所有者邮箱仍需明确传入。
+
+`FLOW_CODEBLOCK_OWNER_NAME` 是可选的默认脚本所有者姓名。配置后，`flow_lock_script` 的 `owner_name` 参数可以省略，MCP 会使用该变量；显式传入的姓名优先。所有权转移中的 `new_owner_name` 仍需明确传入。
 
 ## 通用 stdio MCP 配置
 
@@ -30,11 +34,12 @@ FLOW_CODEBLOCK_OWNER_EMAIL=owner@example.com
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.2.32"],
+      "args": ["--bun", "flow-codeblock-mcp@0.2.33"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "https://qingcode.oalite.com",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>",
-        "FLOW_CODEBLOCK_OWNER_EMAIL": "owner@example.com"
+        "FLOW_CODEBLOCK_OWNER_EMAIL": "owner@example.com",
+        "FLOW_CODEBLOCK_OWNER_NAME": "Default Owner"
       }
     }
   }

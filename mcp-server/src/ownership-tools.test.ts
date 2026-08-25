@@ -35,6 +35,7 @@ const transport = new StdioClientTransport({
     FLOW_CODEBLOCK_BASE_URL: apiServer.url.origin,
     FLOW_CODEBLOCK_TOKEN: "flow_ownership_test",
     FLOW_CODEBLOCK_OWNER_EMAIL: "owner@example.com",
+    FLOW_CODEBLOCK_OWNER_NAME: "Default Owner",
   },
   stderr: "pipe",
 });
@@ -96,6 +97,41 @@ describe("script ownership release tools", () => {
       body: { email: "explicit@example.com", code: "654321" },
       method: "POST",
       path: "/flow/scripts/script%20explicit/unlock",
+    });
+  });
+
+  test("uses the configured owner name when locking without an owner_name", async () => {
+    await client.callTool({
+      name: "flow_lock_script",
+      arguments: {
+        script_id: "script default name",
+        code: "123456",
+      },
+    });
+
+    expect(apiRequests.at(-1)).toEqual({
+      accessToken: "flow_ownership_test",
+      body: { email: "owner@example.com", code: "123456", owner_name: "Default Owner" },
+      method: "POST",
+      path: "/flow/scripts/script%20default%20name/lock",
+    });
+  });
+
+  test("prefers an explicitly supplied owner name over the configured default", async () => {
+    await client.callTool({
+      name: "flow_lock_script",
+      arguments: {
+        script_id: "script explicit name",
+        code: "654321",
+        owner_name: "Explicit Owner",
+      },
+    });
+
+    expect(apiRequests.at(-1)).toEqual({
+      accessToken: "flow_ownership_test",
+      body: { email: "owner@example.com", code: "654321", owner_name: "Explicit Owner" },
+      method: "POST",
+      path: "/flow/scripts/script%20explicit%20name/lock",
     });
   });
 });

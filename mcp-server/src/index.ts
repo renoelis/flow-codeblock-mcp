@@ -15,6 +15,7 @@ import { assertScriptChangeInput } from "./script-change";
 const configuredBaseUrl = process.env.FLOW_CODEBLOCK_BASE_URL?.trim();
 const accessToken = process.env.FLOW_CODEBLOCK_TOKEN?.trim();
 const configuredOwnerEmail = process.env.FLOW_CODEBLOCK_OWNER_EMAIL?.trim();
+const configuredOwnerName = process.env.FLOW_CODEBLOCK_OWNER_NAME?.trim();
 const previewTtlMs = 10 * 60 * 1000;
 const requestTimeoutMs = 30_000;
 const openAiCompatibleEmailPattern =
@@ -30,6 +31,14 @@ function resolveOwnerEmail(email: string | undefined): string {
   const resolved = email ?? configuredOwnerEmail;
   if (!resolved) {
     throw new Error("email is required; provide it in the tool arguments or configure FLOW_CODEBLOCK_OWNER_EMAIL");
+  }
+  return resolved;
+}
+
+function resolveOwnerName(ownerName: string | undefined): string {
+  const resolved = ownerName ?? configuredOwnerName;
+  if (!resolved) {
+    throw new Error("owner_name is required; provide it in the tool arguments or configure FLOW_CODEBLOCK_OWNER_NAME");
   }
   return resolved;
 }
@@ -55,6 +64,10 @@ if (!accessToken) {
 
 if (configuredOwnerEmail && !openAiCompatibleEmailPattern.test(configuredOwnerEmail)) {
   throw new Error("FLOW_CODEBLOCK_OWNER_EMAIL must be a valid email address");
+}
+
+if (configuredOwnerName && (configuredOwnerName.length < 1 || configuredOwnerName.length > 100)) {
+  throw new Error("FLOW_CODEBLOCK_OWNER_NAME must be 1-100 characters after trimming");
 }
 
 const previewStore = new Map<string, { expiresAt: number; fingerprint: string; operation: "create" | "update"; payload: Record<string, unknown> }>();
@@ -405,7 +418,7 @@ const serverInstructions = [
   "非脚本模式：代码读取全局 input.<字段>；只写代码时不要执行，用户要求测试时调用 flow_execute_code。",
   "脚本模式：代码读取 input.query/input.header/input.body/input.cookies；调用方 POST 时直接发送业务 JSON，不包装 input 或 input.body。创建时必须提交完整 interface_doc；更新代码时可提交完整 interface_doc 或 RFC 6902 interface_doc_patch。",
   "最终用户交付按模式区分：non_script 输出 JavaScript、接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和完整 execution_url；script 不主动回显 JavaScript 或原始 interface_doc，只输出接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和发布后的完整 script_url，除非用户明确索要源码或原始文档。script 的代码与 interface_doc 仍必须内部提交给预览/发布工具。",
-  "用户代码中的 process 为 undefined，禁止读取 process.env 或假设服务器预置业务环境变量。第三方 API 密钥由外部调用方通过 input 对应的请求体、查询参数或业务请求头传入，并在接口文档中声明；FLOW_CODEBLOCK_TOKEN 仅供 MCP 平台认证。若配置 FLOW_CODEBLOCK_OWNER_EMAIL，所有权认领、锁定、解锁、释放和转移授权工具在省略对应当前所有者 email 时会使用它；显式传入的 email 优先。",
+  "用户代码中的 process 为 undefined，禁止读取 process.env 或假设服务器预置业务环境变量。第三方 API 密钥由外部调用方通过 input 对应的请求体、查询参数或业务请求头传入，并在接口文档中声明；FLOW_CODEBLOCK_TOKEN 仅供 MCP 平台认证。若配置 FLOW_CODEBLOCK_OWNER_EMAIL 或 FLOW_CODEBLOCK_OWNER_NAME，所有权工具中对应的当前所有者 email、owner_name 可以省略并使用默认值；显式传入的参数优先，所有权转移确认的新所有者信息必须明确传入。",
   "读取当前脚本使用 flow_get_script 且只传 script_id，MCP 会固定以 version=0 标识当前版本；只有用户明确要求具体历史版本时才使用 flow_get_script_version。不得猜测 version，接口文档版本也不得猜测。",
   "flow_get_script 和 flow_get_script_version 会把脚本详情中的 code_base64 解码为 UTF-8 code 返回；严格解码失败时保留原始 code_base64。",
   "所有工具 JSON 出参会递归脱敏 token、access_token、authorization、refresh_token、qingcodeToken 等凭据字段；统计字段 token_cache、unique_tokens 不会被误处理。",
@@ -418,7 +431,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.32" },
+  { name: "flow-codeblock", version: "0.2.33" },
   { instructions: serverInstructions },
 );
 
@@ -617,15 +630,18 @@ server.registerTool(
       script_id: z.string().min(1).describe("申请 lock 验证码时使用的同一脚本 ID。"),
       email: emailInput("申请 lock 验证码时使用的同一邮箱。省略时使用 FLOW_CODEBLOCK_OWNER_EMAIL。", true),
       code: z.string().min(1).describe("邮箱收到的一次性 lock 验证码，不是 JavaScript 代码。"),
-      owner_name: z.string().trim().min(1).max(100).describe("脚本所有者显示名称，去除首尾空白后 1-100 个字符。"),
+      owner_name: z.string().trim().min(1).max(100).optional().describe(
+        "脚本所有者显示名称，去除首尾空白后 1-100 个字符；省略时使用 FLOW_CODEBLOCK_OWNER_NAME。",
+      ),
     },
   },
   async ({ script_id, email, code, owner_name }) => {
     try {
       const resolvedEmail = resolveOwnerEmail(email);
+      const resolvedOwnerName = resolveOwnerName(owner_name);
       return result(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}/lock`, {
         method: "POST",
-        body: JSON.stringify({ email: resolvedEmail, code, owner_name }),
+        body: JSON.stringify({ email: resolvedEmail, code, owner_name: resolvedOwnerName }),
       }));
     } catch (error) {
       return apiError(error);

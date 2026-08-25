@@ -9,7 +9,7 @@ description: 使用 Flow Codeblock MCP 工具写出非脚本代码或创建、�
 
 ## 边界
 
-- MCP 必须从环境读取 `FLOW_CODEBLOCK_BASE_URL` 和 `FLOW_CODEBLOCK_TOKEN`；缺少任一变量时拒绝启动。可选配置 `FLOW_CODEBLOCK_OWNER_EMAIL` 作为脚本所有权认领、锁定、解锁、释放和转移授权工具的默认当前所有者邮箱；显式工具参数优先，转移确认的新所有者邮箱必须明确传入。公网服务使用 `https://qingcode.oalite.com`，仅本机部署 Rust 服务时使用对应的 localhost 地址。非脚本执行地址固定为 `FLOW_CODEBLOCK_BASE_URL + /flow/codeblock`；脚本创建、更新和执行地址固定为 `FLOW_CODEBLOCK_BASE_URL + /flow/codeblock/{script_id}`。对应工具会直接返回 `execution_url` 或 `script_url`，不要询问用户域名；其他工具无需主动告知调用地址。不要把 Token 放入工具参数、代码或文档。
+- MCP 必须从环境读取 `FLOW_CODEBLOCK_BASE_URL` 和 `FLOW_CODEBLOCK_TOKEN`；缺少任一变量时拒绝启动。可选配置 `FLOW_CODEBLOCK_OWNER_EMAIL` 作为脚本所有权认领、锁定、解锁、释放和转移授权工具的默认当前所有者邮箱，配置 `FLOW_CODEBLOCK_OWNER_NAME` 作为首次锁定/认领脚本的默认所有者姓名；显式工具参数优先，转移确认的新所有者信息必须明确传入。公网服务使用 `https://qingcode.oalite.com`，仅本机部署 Rust 服务时使用对应的 localhost 地址。非脚本执行地址固定为 `FLOW_CODEBLOCK_BASE_URL + /flow/codeblock`；脚本创建、更新和执行地址固定为 `FLOW_CODEBLOCK_BASE_URL + /flow/codeblock/{script_id}`。对应工具会直接返回 `execution_url` 或 `script_url`，不要询问用户域名；其他工具无需主动告知调用地址。不要把 Token 放入工具参数、代码或文档。
 - 不提供脚本删除、Token 管理或任意 HTTP 代理工具。删除请求必须拒绝，并引导用户使用现有网页或 REST API。
 - 执行工具使用 MCP Web worker lane，但仍执行服务端认证、配额、限流、安全校验、审计和统计。
 - 锁定、解锁、释放和所有权转移只能使用对应验证码工具，不猜测、记录或复用验证码。
@@ -83,6 +83,7 @@ MCP 预览与 Flow Codeblock 页面、Rust 文档接口使用同一套必填契�
 
 - 锁定/解锁：先调用 `flow_request_script_owner_challenge`，再用邮件验证码调用 `flow_lock_script` 或 `flow_unlock_script`。
 - 若已配置 `FLOW_CODEBLOCK_OWNER_EMAIL`，上述工具及释放、转移授权步骤可省略当前所有者邮箱；MCP 会自动使用该默认值，显式传入时以工具参数为准。
+- 若已配置 `FLOW_CODEBLOCK_OWNER_NAME`，`flow_lock_script` 可省略 `owner_name`；MCP 会自动使用该默认值，显式传入时以工具参数为准。所有权转移的 `new_owner_name` 不使用此默认值。
 - 释放：脚本解锁后，先调用 `flow_request_script_owner_challenge` 并传 `action=release`，再用同一邮箱收到的验证码调用 `flow_release_script_ownership`。成功后所有者信息清空、待确认转移作废，其他 Token 使用者可以重新认领。
 - 转移：调用 `flow_start_ownership_transfer` 后，由新所有者用验证码调用 `flow_confirm_ownership_transfer`。
 - 删除：MCP 不提供删除工具。网页或 REST API 仅允许删除已解锁且已释放所有权的脚本；解锁会保留所有者，不能直接删除。

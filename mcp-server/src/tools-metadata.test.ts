@@ -60,6 +60,7 @@ describe("MCP tool metadata", () => {
     expect(instructions).toContain("不得仅因发生兼容纠正就重写文档或再次预览");
     expect(instructions).toContain("禁止读取 process.env");
     expect(instructions).toContain("FLOW_CODEBLOCK_OWNER_EMAIL");
+    expect(instructions).toContain("FLOW_CODEBLOCK_OWNER_NAME");
     expect(instructions).toContain("最终用户交付按模式区分");
     expect(instructions).toContain("script 不主动回显 JavaScript 或原始 interface_doc");
     expect(tools.map((tool) => tool.name).sort()).toEqual(expectedToolNames);
@@ -129,6 +130,11 @@ describe("MCP tool metadata", () => {
 
     expect(byName.get("flow_confirm_ownership_transfer")?.inputSchema.required ?? [])
       .toContain("email");
+    expect(byName.get("flow_lock_script")?.inputSchema.required ?? []).not.toContain("owner_name");
+    expect(byName.get("flow_lock_script")?.inputSchema.properties?.owner_name?.description)
+      .toContain("FLOW_CODEBLOCK_OWNER_NAME");
+    expect(byName.get("flow_start_ownership_transfer")?.inputSchema.required ?? [])
+      .toContain("new_owner_name");
   });
 
   test("avoids propertyNames in the structured interface document schema", () => {
