@@ -200,13 +200,14 @@ const serverInstructions = [
   "非脚本模式：代码读取全局 input.<字段>；只写代码时不要执行，用户要求测试时调用 flow_execute_code。",
   "脚本模式：代码读取 input.query/input.header/input.body/input.cookies；调用方 POST 时直接发送业务 JSON，不包装 input 或 input.body。创建或修改代码时必须同时生成完整 interface_doc。",
   "读取当前脚本使用 flow_get_script 且只传 script_id，MCP 会固定以 version=0 标识当前版本；只有用户明确要求具体历史版本时才使用 flow_get_script_version。不得猜测 version，接口文档版本也不得猜测。",
+  "释放所有权时先调用 flow_request_script_owner_challenge(action=release)，再使用同一脚本、邮箱和验证码调用 flow_release_script_ownership；脚本必须已解锁。",
   "任何脚本变更都先调用 flow_preview_script_change；只有向用户展示预览且获得明确确认后，才调用 flow_apply_script_change。不得把用户要求预览或修改视为发布确认。",
   "MCP 不提供删除工具。遇到删除请求必须拒绝调用其他工具替代删除，并告知用户通过 Flow Codeblock 网页或 REST DELETE /flow/scripts/{scriptId} 自行删除。",
   "读取当前版本后再更新；版本冲突、404、锁定、限流、配额或校验失败时根据错误处理，不要用反复试调用探测参数。",
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.13" },
+  { name: "flow-codeblock", version: "0.2.14" },
   { instructions: serverInstructions },
 );
 
@@ -368,12 +369,14 @@ server.registerTool(
 server.registerTool(
   "flow_request_script_owner_challenge",
   {
-    title: "申请锁定或解锁验证码",
-    description: "锁定/解锁两步流程的第 1 步：向脚本所有者邮箱发送一次性验证码。随后分别调用 flow_lock_script 或 flow_unlock_script，并使用完全相同的 script_id、action 对应操作和 email。已有所有者时邮箱必须匹配；首次锁定可认领尚无所有者的脚本。发送验证码会产生外部邮件副作用，须基于用户明确请求调用。",
+    title: "申请脚本所有权验证码",
+    description: "锁定、解锁或释放所有权两步流程的第 1 步：向脚本所有者邮箱发送一次性验证码。随后根据 action 调用 flow_lock_script、flow_unlock_script 或 flow_release_script_ownership，并使用完全相同的 script_id 和 email。已有所有者时邮箱必须匹配；首次锁定可认领尚无所有者的脚本；release 仅适用于已解锁且已有所有者的脚本。发送验证码会产生外部邮件副作用，须基于用户明确请求调用。",
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     inputSchema: {
-      script_id: z.string().min(1).describe("要锁定或解锁的脚本 ID。"),
-      action: z.enum(["lock", "unlock"]).describe("验证码用途；必须与下一步调用的 lock 或 unlock 工具一致。"),
+      script_id: z.string().min(1).describe("要锁定、解锁或释放所有权的脚本 ID。"),
+      action: z.enum(["lock", "unlock", "release"]).describe(
+        "验证码用途；必须与下一步 lock、unlock 或 release 工具完全一致。",
+      ),
       email: emailInput("接收验证码的所有者邮箱；下一步必须原样使用。"),
     },
   },
@@ -429,6 +432,30 @@ server.registerTool(
   async ({ script_id, email, code }) => {
     try {
       return result(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}/unlock`, {
+        method: "POST",
+        body: JSON.stringify({ email, code }),
+      }));
+    } catch (error) {
+      return apiError(error);
+    }
+  },
+);
+
+server.registerTool(
+  "flow_release_script_ownership",
+  {
+    title: "释放脚本所有权",
+    description: "释放所有权流程第 2 步：使用 flow_request_script_owner_challenge(action=release) 发到同一 email 的验证码，清除已解锁脚本的所有者邮箱和姓名，并作废待确认的所有权转移。释放后其他持有同一 Token 的用户可以重新认领并锁定脚本；只在当前所有者明确要求释放并提供验证码后调用。",
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    inputSchema: {
+      script_id: z.string().min(1).describe("申请 release 验证码时使用的同一已解锁脚本 ID。"),
+      email: emailInput("申请 release 验证码时使用的同一当前所有者邮箱。"),
+      code: z.string().min(1).describe("当前所有者邮箱收到的一次性 release 验证码。"),
+    },
+  },
+  async ({ script_id, email, code }) => {
+    try {
+      return result(await apiRequest(`/flow/scripts/${encodeURIComponent(script_id)}/release-ownership`, {
         method: "POST",
         body: JSON.stringify({ email, code }),
       }));

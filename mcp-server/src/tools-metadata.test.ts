@@ -14,6 +14,7 @@ const expectedToolNames = [
   "flow_list_scripts",
   "flow_lock_script",
   "flow_preview_script_change",
+  "flow_release_script_ownership",
   "flow_request_script_owner_challenge",
   "flow_script_stats",
   "flow_start_ownership_transfer",
@@ -52,6 +53,7 @@ describe("MCP tool metadata", () => {
     expect(instructions).toContain("先调用 flow_preview_script_change");
     expect(instructions).toContain("MCP 不提供删除工具");
     expect(instructions).toContain("不得猜测 version");
+    expect(instructions).toContain("flow_release_script_ownership");
     expect(tools.map((tool) => tool.name).sort()).toEqual(expectedToolNames);
     expect(tools.some((tool) => tool.name.includes("delete"))).toBe(false);
   });
@@ -77,6 +79,7 @@ describe("MCP tool metadata", () => {
       ["flow_request_script_owner_challenge", "email"],
       ["flow_lock_script", "email"],
       ["flow_unlock_script", "email"],
+      ["flow_release_script_ownership", "email"],
       ["flow_start_ownership_transfer", "authorizer_email"],
       ["flow_start_ownership_transfer", "new_owner_email"],
       ["flow_confirm_ownership_transfer", "email"],
@@ -113,6 +116,10 @@ describe("MCP tool metadata", () => {
     expect(byName.get("flow_preview_script_change")?.description).toContain("interface_doc_normalizations");
     expect(byName.get("flow_preview_script_change")?.description).toContain("保留原文档");
     expect(byName.get("flow_apply_script_change")?.description).toContain("用户随后明确确认发布");
+    expect(byName.get("flow_request_script_owner_challenge")?.inputSchema.properties?.action)
+      .toMatchObject({ enum: ["lock", "unlock", "release"] });
+    expect(byName.get("flow_release_script_ownership")?.annotations?.destructiveHint).toBe(true);
+    expect(byName.get("flow_release_script_ownership")?.description).toContain("已解锁");
 
     for (const currentToolName of ["flow_get_script", "flow_get_script_documentation"]) {
       const currentTool = byName.get(currentToolName);

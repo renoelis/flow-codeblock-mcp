@@ -12,7 +12,7 @@ description: 使用 Flow Codeblock MCP 工具写出非脚本代码或创建、�
 - MCP 必须从环境读取 `FLOW_CODEBLOCK_BASE_URL` 和 `FLOW_CODEBLOCK_TOKEN`；缺少任一变量时拒绝启动。公网服务使用 `https://qingcode.oalite.com`，仅本机部署 Rust 服务时使用对应的 localhost 地址。不要把 Token 放入工具参数、代码或文档。
 - 不提供脚本删除、Token 管理或任意 HTTP 代理工具。删除请求必须拒绝，并引导用户使用现有网页或 REST API。
 - 执行工具使用 MCP Web worker lane，但仍执行服务端认证、配额、限流、安全校验、审计和统计。
-- 锁定、解锁和所有权转移只能使用对应验证码工具，不猜测、记录或复用验证码。
+- 锁定、解锁、释放和所有权转移只能使用对应验证码工具，不猜测、记录或复用验证码。
 
 ## 写码模式
 
@@ -69,6 +69,7 @@ MCP 预览使用严格完整性门禁。文档必须与代码行为一致，并�
 ## 所有权
 
 - 锁定/解锁：先调用 `flow_request_script_owner_challenge`，再用邮件验证码调用 `flow_lock_script` 或 `flow_unlock_script`。
+- 释放：脚本解锁后，先调用 `flow_request_script_owner_challenge` 并传 `action=release`，再用同一邮箱收到的验证码调用 `flow_release_script_ownership`。成功后所有者信息清空、待确认转移作废，其他 Token 使用者可以重新认领。
 - 转移：调用 `flow_start_ownership_transfer` 后，由新所有者用验证码调用 `flow_confirm_ownership_transfer`。
 - 验证码错误、过期、冷却或所有者不匹配时停止并报告服务端错误。
 

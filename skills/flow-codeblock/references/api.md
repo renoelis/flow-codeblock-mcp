@@ -93,7 +93,8 @@ Token 级限流响应使用 `TokenRateLimitError`，`error.details.retryAfter` �
 | DuplicateScriptError | 脚本代码重复 | 409 |
 | ScriptQuotaExceededError | 脚本数量配额超限 | 429 |
 | ScriptLockedError | 脚本已锁定，禁止编辑、回滚与删除 | 423 |
-| ScriptOwnerError | 非脚本所有者执行锁定、解锁或转移 | 403 |
+| ScriptOwnerError | 非脚本所有者执行锁定、解锁、释放或转移 | 403 |
+| ScriptOwnershipNotClaimedError | 脚本当前没有可释放或管理的所有者 | 409 |
 | ScriptOwnershipTransferNotReadyError | 所有权转移无效、过期或缺少前序验证 | 409 |
 | VersionNotFoundError | 脚本版本不存在 | 404 |
 | IPNotAllowedError | IP 不在白名单 | 403 |
@@ -466,13 +467,19 @@ Token 掩码规则（`GET /flow/tokens`）：仅提供 `ws_id` 或仅提供 `ema
 
 #### POST /flow/scripts/{scriptId}/owner-challenge
 - 认证：Token
-- 请求体：`{action:"lock"|"unlock", email}`
+- 请求体：`{action:"lock"|"unlock"|"release", email}`
 - 向可用的所有者邮箱发送一次性验证码。首次锁定可认领未设置所有者的存量脚本；已有所有者时邮箱必须匹配。
 
 #### POST /flow/scripts/{scriptId}/lock 与 POST /flow/scripts/{scriptId}/unlock
 - 认证：Token
 - 锁定请求体：`{email, code, owner_name}`；`owner_name` 去除首尾空白后须为 1-100 个字符，且不能包含控制字符。解锁请求体：`{email, code}`。
 - 验证码严格绑定脚本 ID、操作类型与邮箱，成功后响应 `data.is_locked`、`data.locked_at`、`data.owner_name`、`data.owner_display_name` 与中段脱敏的 `data.owner_email_hint`。解锁保留已认领的所有者和姓名。
+
+#### POST /flow/scripts/{scriptId}/release-ownership
+- 认证：Token
+- 请求体：`{email, code}`；验证码必须通过 `owner-challenge` 的 `release` 动作申请，并使用当前所有者邮箱。
+- 仅未锁定且已有所有者的脚本可以释放。成功后原子清除所有者邮箱和姓名，作废所有待确认的所有权转移并追加审计记录；响应中的 `owner_name`、`owner_display_name`、`owner_email_hint` 均为 `null`。
+- 释放后脚本保持未锁定，下一位持有同一 Token 的用户可以通过首次锁定流程重新认领。
 
 #### POST /flow/scripts/{scriptId}/ownership-transfers
 - 认证：Token

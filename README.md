@@ -7,7 +7,7 @@ Flow Codeblock 的本地 stdio MCP Server 与 Codex Skill。MCP 只调用 Flow C
 需要 Bun 1.4.0 或更高版本：
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.2.13
+bunx --bun flow-codeblock-mcp@0.2.14
 ```
 
 必须配置：
@@ -26,7 +26,7 @@ FLOW_CODEBLOCK_TOKEN=flow_xxx
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.2.13"],
+      "args": ["--bun", "flow-codeblock-mcp@0.2.14"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "https://qingcode.oalite.com",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>"
@@ -44,6 +44,7 @@ npm 包包含 MCP 运行源码、`flow-codeblock` Skill、`AGENT_PROMPT.md`、�
 - 查询当前脚本时调用 `flow_get_script`，只传 `script_id`；MCP 会固定向 API 附加 `version=0` 标识当前版本。只有明确查询具体历史版本时才调用 `flow_get_script_version`。接口文档当前与历史版本分别使用 `flow_get_script_documentation` 和 `flow_get_script_documentation_version`。
 - 预览前会纠正接口文档中可无歧义识别的 `schema` 字段错位、外层或别名节点 `example` 缺失，并移除 `usage_refs` 中无效的非对象说明；修正记录通过 `interface_doc_normalizations` 返回，其他错误应按路径局部修复。
 - 创建或更新脚本必须先调用 `flow_preview_script_change`，向用户展示预览并获得明确确认后才能调用 `flow_apply_script_change`。
+- 释放所有权时，先用 `flow_request_script_owner_challenge(action=release)` 申请当前所有者验证码，再调用 `flow_release_script_ownership`；脚本必须先解锁，释放后其他 Token 使用者可以重新认领。
 - 脚本 POST 调用方直接提交业务 JSON，不包装为 `input` 或 `input.body`。
 - MCP 不提供删除脚本工具；删除需要用户通过网页或 REST API 自行操作。
 - 执行操作正常进行认证、限流、配额扣减、安全校验、统计和审计。
