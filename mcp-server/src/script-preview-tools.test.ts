@@ -132,12 +132,12 @@ describe("script preview tool", () => {
     expect(preview.preview_ready).toBe(true);
     expect(preview.requires_repreview).toBe(false);
     expect(preview.interface_doc_normalizations).toEqual([
-      "interface_doc.usage_refs 已移除 1 个非对象条目；普通说明应写入 logic_description",
-      "interface_doc.request.body.properties 已移入 interface_doc.request.body.schema.properties",
-      "interface_doc.request.body.required 已移入 interface_doc.request.body.schema.required",
-      "interface_doc.request.body.example 已从 interface_doc.request.body.schema.example 提升",
-      "interface_doc.request.body.schema.properties.storeInfo.example 已从别名 interface_doc.request.body.schema.properties.store_info.example 补全",
-      "interface_doc.responses[0].example 已从 interface_doc.responses[0].schema.example 提升",
+      "Removed 1 non-object entries from interface_doc.usage_refs; ordinary prose belongs in logic_description",
+      "interface_doc.request.body.properties moved to interface_doc.request.body.schema.properties",
+      "interface_doc.request.body.required moved to interface_doc.request.body.schema.required",
+      "interface_doc.request.body.example was promoted from interface_doc.request.body.schema.example",
+      "interface_doc.request.body.schema.properties.storeInfo.example was filled from alias interface_doc.request.body.schema.properties.store_info.example",
+      "interface_doc.responses[0].example was promoted from interface_doc.responses[0].schema.example",
     ]);
 
     const interfaceDoc = validationRequest?.interface_doc as Record<string, unknown>;
@@ -195,7 +195,7 @@ describe("script preview tool", () => {
     if (!previewContent || previewContent.type !== "text") throw new Error("preview did not return text");
     const preview = JSON.parse(previewContent.text) as Record<string, unknown>;
     expect(preview.input_normalizations).toEqual([
-      "create 操作误传的 expected_version=0 已忽略；该字段仅用于 update",
+      "expected_version=0 was ignored for create; this field applies only to update",
     ]);
 
     const applyResponse = await client.callTool({
@@ -221,7 +221,7 @@ describe("script preview tool", () => {
     const preview = JSON.parse(content.text) as Record<string, unknown>;
     expect(preview.operation).toBe("create");
     expect(preview.input_normalizations).toEqual([
-      "未传 operation，因未提供 script_id 已推断为 create",
+      "operation omitted; inferred create because script_id was not provided",
     ]);
   });
 
@@ -242,7 +242,7 @@ describe("script preview tool", () => {
     const preview = JSON.parse(content.text) as Record<string, unknown>;
     expect(preview.operation).toBe("update");
     expect(preview.input_normalizations).toEqual([
-      "未传 operation，因提供了 script_id 已推断为 update",
+      "operation omitted; inferred update because script_id was provided",
     ]);
   });
 
@@ -313,7 +313,7 @@ describe("script preview tool", () => {
       expect(response.isError).toBe(true);
       const content = response.content.find((item) => item.type === "text");
       if (!content || content.type !== "text") throw new Error("preview error did not return text");
-      expect(content.text).toContain("第三方 API 密钥必须由外部调用方");
+      expect(content.text).toContain("third-party API keys must be supplied by the caller");
       expect(validationRequest).toBeUndefined();
     }
   });
@@ -341,9 +341,9 @@ describe("script preview tool", () => {
     if (!content || content.type !== "text") throw new Error("preview did not return text");
     const preview = JSON.parse(content.text) as Record<string, unknown>;
     expect(preview.interface_doc_normalizations).toEqual(expect.arrayContaining([
-      "interface_doc.responses[0].responses_placeholder 空占位字段已移除",
-      "interface_doc.responses[0].schema.properties.required 已移入 interface_doc.responses[0].schema.required",
-      "interface_doc.responses[0].schema.properties.additionalProperties 已移入 interface_doc.responses[0].schema.additionalProperties",
+      "interface_doc.responses[0].responses_placeholder empty placeholder removed",
+      "interface_doc.responses[0].schema.properties.required moved to interface_doc.responses[0].schema.required",
+      "interface_doc.responses[0].schema.properties.additionalProperties moved to interface_doc.responses[0].schema.additionalProperties",
     ]));
 
     const validatedDocument = validationRequest?.interface_doc as Record<string, unknown>;
@@ -374,9 +374,9 @@ describe("script preview tool", () => {
     const content = response.content.find((item) => item.type === "text");
     if (!content || content.type !== "text") throw new Error("preview error did not return text");
     expect(content.text).toContain("interface_doc.logic_description");
-    expect(content.text).toContain("保留原 interface_doc");
-    expect(content.text).toContain("本次已自动规范化");
-    expect(content.text).toContain("interface_doc.request.body.properties 已移入");
+    expect(content.text).toContain("preserve all other fields");
+    expect(content.text).toContain("Automatic normalizations applied in this call");
+    expect(content.text).toContain("interface_doc.request.body.properties moved to");
   });
 
   test("accepts opaque upstream JSON response objects", async () => {
@@ -429,10 +429,10 @@ describe("script preview tool", () => {
     if (!content || content.type !== "text") throw new Error("preview did not return text");
     const preview = JSON.parse(content.text) as Record<string, unknown>;
     expect(preview.interface_doc_normalizations).toEqual(expect.arrayContaining([
-      "interface_doc.logic_description 已将平台内部输入术语转换为调用方 HTTP 术语",
+      "interface_doc.logic_description converted an internal input term to caller-facing HTTP terminology",
     ]));
     const validatedDocument = validationRequest?.interface_doc as Record<string, unknown>;
-    expect(validatedDocument.logic_description).toContain("HTTP 请求体");
+    expect(validatedDocument.logic_description).toContain("HTTP body");
     expect(validatedDocument.logic_description).not.toContain("input.body");
   });
 
@@ -461,9 +461,9 @@ describe("script preview tool", () => {
     if (!content || content.type !== "text") throw new Error("preview did not return text");
     const preview = JSON.parse(content.text) as Record<string, unknown>;
     const normalizations = preview.interface_doc_normalizations as string[];
-    expect(normalizations).toContain("工具参数 responses 已移入 interface_doc.responses");
-    expect(normalizations).toContain("工具参数 logic_description 已移入 interface_doc.logic_description");
-    expect(normalizations).toContain("interface_doc.request.example 已移入 interface_doc.request.body.example");
+    expect(normalizations).toContain("Tool-level responses moved to interface_doc.responses");
+    expect(normalizations).toContain("Tool-level logic_description moved to interface_doc.logic_description");
+    expect(normalizations).toContain("interface_doc.request.example moved to interface_doc.request.body.example");
 
     const normalizedDocument = validationRequest?.interface_doc as Record<string, unknown>;
     const normalizedRequest = normalizedDocument.request as Record<string, unknown>;
@@ -500,9 +500,9 @@ describe("script preview tool", () => {
     if (!content || content.type !== "text") throw new Error("preview did not return text");
     const preview = JSON.parse(content.text) as Record<string, unknown>;
     expect(preview.interface_doc_normalizations).toEqual(expect.arrayContaining([
-      "interface_doc.request.responses 已移入 interface_doc.responses",
-      "interface_doc.request.logic_description 已移入 interface_doc.logic_description",
-      "interface_doc.ip_whitelist 已移回 flow_preview_script_change.ip_whitelist",
+      "interface_doc.request.responses moved to interface_doc.responses",
+      "interface_doc.request.logic_description moved to interface_doc.logic_description",
+      "interface_doc.ip_whitelist moved back to flow_preview_script_change.ip_whitelist",
     ]));
     expect((validationRequest as Record<string, unknown>).ip_whitelist).toEqual(["203.0.113.10"]);
     const normalized = (validationRequest as Record<string, unknown>).interface_doc as Record<string, unknown>;
@@ -541,11 +541,11 @@ describe("script preview tool", () => {
     const preview = JSON.parse(content.text) as Record<string, unknown>;
     expect(preview.changes).toMatchObject({ description: true, ip_whitelist: true, interface_doc: true });
     expect(preview.interface_doc_normalizations).toEqual(expect.arrayContaining([
-      "interface_doc.request.description 已移回 flow_preview_script_change.description",
-      "interface_doc.request.body.ip_whitelist 已移回 flow_preview_script_change.ip_whitelist",
-      "interface_doc.request.body.schema.responses 已移入 interface_doc.responses",
-      "interface_doc.request.body.schema.logic_description 已移入 interface_doc.logic_description",
-      "interface_doc.request.body.example 已从 interface_doc.request.body.schema.properties.example 提升",
+      "interface_doc.request.description moved back to flow_preview_script_change.description",
+      "interface_doc.request.body.ip_whitelist moved back to flow_preview_script_change.ip_whitelist",
+      "interface_doc.request.body.schema.responses moved to interface_doc.responses",
+      "interface_doc.request.body.schema.logic_description moved to interface_doc.logic_description",
+      "interface_doc.request.body.example was promoted from interface_doc.request.body.schema.properties.example",
     ]));
     expect(validationRequest?.ip_whitelist).toEqual(["203.0.113.30"]);
     const normalized = validationRequest?.interface_doc as Record<string, unknown>;
@@ -570,7 +570,7 @@ describe("script preview tool", () => {
     expect(response.isError).toBe(true);
     const content = response.content.find((item) => item.type === "text");
     if (!content || content.type !== "text") throw new Error("preview error did not return text");
-    expect(content.text).toContain("不能替代 interface_doc");
+    expect(content.text).toContain("cannot replace interface_doc");
   });
 
   test("omits unchanged whitelist values from interface document updates", async () => {
@@ -612,7 +612,7 @@ describe("script preview tool", () => {
         expect(validationRequest?.ip_whitelist).toEqual(scenario.submitted);
         expect(preview.ignored_changes).toBeUndefined();
       } else {
-        expect(preview.ignored_changes).toEqual(["ip_whitelist 与当前值相同，已从本次变更中省略"]);
+        expect(preview.ignored_changes).toEqual(["ip_whitelist matches the current value and was omitted from this change"]);
       }
 
       if (index === 0) {

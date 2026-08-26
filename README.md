@@ -1,40 +1,38 @@
 # flow-codeblock-mcp
 
-Flow Codeblock 的本地 stdio MCP Server 与 Codex Skill。MCP 只调用 Flow Codeblock Rust REST API，不在用户电脑执行用户 JavaScript；用户代码仍由服务端固定版本 Bun Supervisor 执行。
+Local stdio MCP server and Codex Skill for Flow Codeblock. The MCP server calls the Flow Codeblock Rust REST API; it never executes user JavaScript on the user's computer. User code runs in the server's pinned Bun Supervisor.
 
-## 安装
+## Installation
 
-需要 Bun 1.4.0 或更高版本：
+Requires Bun 1.4.0 or newer:
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.2.34
+bunx --bun flow-codeblock-mcp@0.3.0
 ```
 
-必须配置：
+Required environment:
 
 ```bash
 FLOW_CODEBLOCK_BASE_URL=https://qingcode.oalite.com
 FLOW_CODEBLOCK_TOKEN=flow_xxx
-# 可选：所有权认领、锁定、解锁、释放及转移授权工具的默认邮箱
+# Optional default owner email for ownership operations
 FLOW_CODEBLOCK_OWNER_EMAIL=owner@example.com
-# 可选：首次锁定/认领脚本时的默认所有者姓名
+# Optional default owner name for first lock/claim
 FLOW_CODEBLOCK_OWNER_NAME=Default Owner
 ```
 
-`FLOW_CODEBLOCK_BASE_URL` 是已部署的 Flow Codeblock Rust API 地址，也是代码调用地址的基址。非脚本工具会返回 `${FLOW_CODEBLOCK_BASE_URL}/flow/codeblock` 形式的 `execution_url`；脚本创建、更新和执行工具会返回 `${FLOW_CODEBLOCK_BASE_URL}/flow/codeblock/{script_id}` 形式的 `script_url`，无需再向用户询问域名。其他管理工具不额外附加调用地址。公网服务使用 `https://qingcode.oalite.com`；仅当用户在本机部署 Rust 服务时才改为对应的 localhost 地址。Token 应使用客户端的环境变量或密钥配置，不要写入提示词、工具参数或公开文件。
+`FLOW_CODEBLOCK_BASE_URL` is the deployed Flow Codeblock Rust API base URL and the base for returned call URLs. Non-script tools return `${FLOW_CODEBLOCK_BASE_URL}/flow/codeblock` as `execution_url`; script create, update, and execution tools return `${FLOW_CODEBLOCK_BASE_URL}/flow/codeblock/{script_id}` as `script_url`. Other management tools do not return a call URL. Use `https://qingcode.oalite.com` for the public service, or the matching localhost URL for a local Rust deployment. Store the token in the client's environment or secret manager; never put it in prompts, tool arguments, or public files.
 
-`FLOW_CODEBLOCK_OWNER_EMAIL` 是可选的默认脚本所有者邮箱。配置后，`flow_request_script_owner_challenge`、`flow_lock_script`、`flow_unlock_script`、`flow_release_script_ownership` 和 `flow_start_ownership_transfer` 的当前所有者邮箱参数可以省略，MCP 会使用该变量；显式传入的邮箱优先。所有权转移确认中的新所有者邮箱仍需明确传入。
+When `FLOW_CODEBLOCK_OWNER_EMAIL` is configured, current-owner email arguments for challenge, lock, unlock, release, and transfer authorization may be omitted. Explicit arguments win. The new owner email in a transfer confirmation is always required. When `FLOW_CODEBLOCK_OWNER_NAME` is configured, `flow_lock_script.owner_name` may be omitted; `new_owner_name` in transfers is always required.
 
-`FLOW_CODEBLOCK_OWNER_NAME` 是可选的默认脚本所有者姓名。配置后，`flow_lock_script` 的 `owner_name` 参数可以省略，MCP 会使用该变量；显式传入的姓名优先。所有权转移中的 `new_owner_name` 仍需明确传入。
-
-## 通用 stdio MCP 配置
+## Generic stdio configuration
 
 ```json
 {
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.2.34"],
+      "args": ["--bun", "flow-codeblock-mcp@0.3.0"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "https://qingcode.oalite.com",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>",
@@ -46,21 +44,19 @@ FLOW_CODEBLOCK_OWNER_NAME=Default Owner
 }
 ```
 
-npm 包包含 MCP 运行源码、`flow-codeblock` Skill、`AGENT_PROMPT.md`、模块/危险模式规则和接口文档 Schema。普通 MCP 客户端不会自动安装 Codex Skill，但 `flow_write_code` 会直接读取包内权威规则，因此不依赖 Skill 注入也能获得完整代码契约。
+The npm package includes the MCP runtime, the `flow-codeblock` Skill, `AGENT_PROMPT.md`, module and dangerous-pattern rules, and interface-document Schemas. Ordinary MCP clients do not install the Codex Skill automatically; `flow_write_code` reads the authoritative rules from the package at runtime.
 
-## 使用约束
+## Calling rules
 
-- 写代码前调用 `flow_write_code`；非脚本模式从 `input.<字段>` 读取，脚本模式从 `input.query/header/body/cookies` 读取。
-- 最终用户交付按模式区分：`non_script` 输出 JavaScript、接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和完整 `execution_url`；`script` 不主动回显 JavaScript 或原始 `interface_doc`，只输出接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和发布后的完整 `script_url`。脚本代码与 `interface_doc` 仍由模型内部提交给预览/发布工具，除非用户明确索要源码或原始文档。
-- 查询当前脚本时调用 `flow_get_script`，只传 `script_id`；MCP 会固定向 API 附加 `version=0` 标识当前版本，并将详情中的 `code_base64` 解码为 UTF-8 `code` 返回给大模型。只有明确查询具体历史版本时才调用 `flow_get_script_version`，该工具同样会解码代码；无法严格解码时保留原始 `code_base64`。接口文档当前与历史版本分别使用 `flow_get_script_documentation` 和 `flow_get_script_documentation_version`。
-- 所有工具 JSON 出参中的 `token`、`access_token`、`authorization`、`refresh_token`、`qingcodeToken` 等凭据字段都会自动脱敏；统计字段如 `token_cache`、`unique_tokens` 不会被误处理。
-- `flow_preview_script_change` 会向模型暴露结构化的 `interface_doc` 和 RFC 6902 `interface_doc_patch` 工具 Schema。创建或代码更新可提交完整文档；已有文档只改字段时可按当前文档路径提交补丁，避免重复传输未修改内容。预览前还会纠正可无歧义识别的 `responses/logic_description` 深层错位、误放的完整请求示例、`schema.properties.required`、脚本 `description` 和 `ip_whitelist`，将说明字段中误写的 `input.query/header/body/cookies` 转换为调用方 HTTP 术语，并通过 `interface_doc_normalizations` 返回修正记录；更新时与当前值相同的 `ip_whitelist` 会从变更载荷中省略，并通过 `ignored_changes` 说明，避免只改接口文档时误报白名单变更；固定字段对象使用 `properties`，键名未知且值同构的字典使用对象形式 `additionalProperties`，仅脚本原样透传且结构确实未知的上游 JSON 对象使用 `additionalProperties: true`。
-- 创建或更新脚本必须先调用 `flow_preview_script_change`，向用户展示预览并获得明确确认后才能调用 `flow_apply_script_change`。
-- `flow_preview_script_change.operation` 建议显式传入；漏传时 MCP 会根据 `script_id` 自动推断，没有脚本 ID 视为创建，有脚本 ID 视为更新，并在 `input_normalizations` 中说明。
-- 成功预览会返回 `preview_ready=true`、`requires_repreview=false`；自动归一化已经写入该 `preview_id`，不应仅因存在 `interface_doc_normalizations` 就重写文档或重复预览。Schema 节点自身的示例和异常关键字会在第一次预览中递归校验。
-- 非脚本写码/执行返回完整 `execution_url`；脚本创建、更新发布及执行返回完整 `script_url`。列表、读取、文档、统计和所有权工具不额外附加调用地址。
-- 用户代码不能读取 `process.env` 或服务器业务环境变量。百度 AK 等第三方密钥必须由外部调用方通过业务请求体、查询参数或业务请求头传入，并在接口文档中声明；`FLOW_CODEBLOCK_TOKEN` 仅供 MCP 平台认证。
-- 释放所有权时，先用 `flow_request_script_owner_challenge(action=release)` 申请当前所有者验证码，再调用 `flow_release_script_ownership`；脚本必须先解锁，释放后其他 Token 使用者可以重新认领。
-- 脚本 POST 调用方直接提交业务 JSON，不包装为 `input` 或 `input.body`。
-- MCP 不提供删除脚本工具；删除需要用户通过网页或 REST API 自行操作，并且脚本必须已解锁且已释放所有权。仅解锁不会清除所有者，也不能删除。
-- 执行操作正常进行认证、限流、配额扣减、安全校验、统计和审计。
+- Call `flow_write_code` before writing code. Non-script code reads `input.<field>`; script code reads `input.query/header/body/cookies` internally.
+- Script changes require `flow_preview_script_change`, display of the successful preview, explicit user confirmation, and then `flow_apply_script_change`. A successful preview already contains all normalizations and does not need a second preview.
+- Use `flow_get_script` with only `script_id` for the current version. Use history tools only for an explicitly requested version. The MCP server decodes valid `code_base64` to UTF-8 `code`.
+- POST script execution receives the caller's business JSON directly as `body`; do not wrap it in `input` or `input.body`.
+- Third-party API keys are business inputs supplied through the documented body, query, or business headers. User code must not read `process.env`; `FLOW_CODEBLOCK_TOKEN` is platform authentication only.
+- All JSON outputs recursively redact credential fields such as `token`, `access_token`, `authorization`, `refresh_token`, and `qingcodeToken`. Statistics such as `token_cache` and `unique_tokens` are not credentials.
+- Release ownership by requesting a `release` challenge first, then using the same script, email, and code; the script must be unlocked. MCP has no deletion tool. Deletion requires the web UI or REST API after unlock and ownership release.
+- Execution performs normal authentication, rate limiting, quota accounting, security validation, auditing, and statistics.
+
+## License
+
+MIT

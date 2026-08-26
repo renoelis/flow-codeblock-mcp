@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { join } from "node:path";
 
 const expectedToolNames = [
   "flow_apply_script_change",
@@ -49,20 +50,11 @@ afterAll(async () => {
 describe("MCP tool metadata", () => {
   test("publishes standalone server instructions and the complete safe tool set", () => {
     const instructions = client.getInstructions() ?? "";
-    expect(instructions).toContain("不依赖 Skill");
-    expect(instructions).toContain("先调用 flow_preview_script_change");
-    expect(instructions).toContain("MCP 不提供删除工具");
-    expect(instructions).toContain("仅解锁不能删除");
-    expect(instructions).toContain("不得猜测 version");
-    expect(instructions).toContain("flow_release_script_ownership");
-    expect(instructions).toContain("只有工具成功返回 preview_id");
-    expect(instructions).toContain("漏传时 MCP 根据 script_id 是否存在推断 create/update");
-    expect(instructions).toContain("不得仅因发生兼容纠正就重写文档或再次预览");
-    expect(instructions).toContain("禁止读取 process.env");
-    expect(instructions).toContain("FLOW_CODEBLOCK_OWNER_EMAIL");
-    expect(instructions).toContain("FLOW_CODEBLOCK_OWNER_NAME");
-    expect(instructions).toContain("最终用户交付按模式区分");
-    expect(instructions).toContain("script 不主动回显 JavaScript 或原始 interface_doc");
+    expect(instructions).toContain("self-contained");
+    expect(instructions).toContain("Use flow_preview_script_change before every script create/update");
+    expect(instructions).toContain("MCP does not provide script deletion");
+    expect(instructions).toContain("Do not guess versions");
+    expect(instructions).toContain("platform tokens");
     expect(tools.map((tool) => tool.name).sort()).toEqual(expectedToolNames);
     expect(tools.some((tool) => tool.name.includes("delete"))).toBe(false);
   });
@@ -79,6 +71,39 @@ describe("MCP tool metadata", () => {
         expect(typeof description, `${tool.name}.${name} description type`).toBe("string");
         expect(String(description).trim().length, `${tool.name}.${name} description`).toBeGreaterThan(10);
       }
+    }
+  });
+
+  test("keeps published static metadata and documentation in English", async () => {
+    const cjkPattern = /[\u3400-\u9fff]/;
+    const visit = (value: unknown, path: string): void => {
+      if (typeof value === "string") {
+        expect(cjkPattern.test(value), path).toBe(false);
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach((item, index) => visit(item, `${path}[${index}]`));
+        return;
+      }
+      if (typeof value !== "object" || value === null) return;
+      for (const [key, child] of Object.entries(value)) visit(child, `${path}.${key}`);
+    };
+
+    tools.forEach((tool) => visit(tool, `tool:${tool.name}`));
+    const root = join(import.meta.dir, "../..");
+    for (const relativePath of [
+      "README.md",
+      ".mcp.json",
+      ".codex-plugin/plugin.json",
+      "skills/flow-codeblock/SKILL.md",
+      "skills/flow-codeblock/references/AGENT_PROMPT.md",
+      "skills/flow-codeblock/references/api.md",
+      "skills/flow-codeblock/references/dangerous_patterns.json",
+      "skills/flow-codeblock/references/script-interface-doc.schema.json",
+      "skills/flow-codeblock/references/script-interface-doc.patch.schema.json",
+    ]) {
+      const content = await Bun.file(join(root, relativePath)).text();
+      expect(cjkPattern.test(content), relativePath).toBe(false);
     }
   });
 
@@ -154,47 +179,42 @@ describe("MCP tool metadata", () => {
 
   test("distinguishes both code input models and locks the preview/apply workflow", () => {
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
-    expect(byName.get("flow_write_code")?.description).toContain("AGENT_PROMPT.md 权威规则原文");
-    expect(byName.get("flow_write_code")?.description).toContain("non_script 从全局 input.<业务字段>");
-    expect(byName.get("flow_write_code")?.description).toContain("script 从 input.query/header/body/cookies");
-    expect(byName.get("flow_write_code")?.description).toContain("最终用户交付只展示接口调用说明");
-    expect(byName.get("flow_execute_script")?.description).toContain("不要包装为 {input:...} 或 {body:...}");
-    expect(byName.get("flow_execute_script")?.description).toContain("完整 script_url");
-    expect(byName.get("flow_execute_code")?.description).toContain("input 参数在此模式会原样成为全局 input");
-    expect(byName.get("flow_execute_code")?.description).toContain("完整 execution_url");
-    expect(byName.get("flow_execute_code")?.description).toContain("不得读取 process.env");
-    expect(byName.get("flow_preview_script_change")?.description).toContain("ip_whitelist=null 或 [] 表示清除");
-    expect(byName.get("flow_preview_script_change")?.description).toContain("interface_doc_normalizations");
-    expect(byName.get("flow_preview_script_change")?.description).toContain("保留原文档");
-    expect(byName.get("flow_preview_script_change")?.description).toContain("无需因此重新预览");
+    expect(byName.get("flow_write_code")?.description).toContain("authoritative AGENT_PROMPT.md");
+    expect(byName.get("flow_execute_script")?.description).toContain("must not be wrapped in input or body");
+    expect(byName.get("flow_execute_script")?.description).toContain("script_url");
+    expect(byName.get("flow_execute_code")?.description).toContain("global input");
+    expect(byName.get("flow_execute_code")?.description).toContain("execution_url");
+    expect(byName.get("flow_execute_code")?.description).toContain("never process.env");
+    expect(byName.get("flow_preview_script_change")?.description).toContain("interface_doc_patch");
+    expect(byName.get("flow_preview_script_change")?.description).toContain("preview_ready=true");
     expect(byName.get("flow_preview_script_change")?.description).toContain("requires_repreview=false");
-    expect(byName.get("flow_preview_script_change")?.description).toContain("漏传时 MCP 会按 script_id 是否存在推断");
+    expect(byName.get("flow_preview_script_change")?.description).toContain("deterministic normalization and validation");
     expect(byName.get("flow_preview_script_change")?.inputSchema.required ?? []).not.toContain("operation");
     expect(byName.get("flow_preview_script_change")?.inputSchema.properties?.operation?.description)
-      .toContain("未提供 script_id=create，已提供 script_id=update");
+      .toContain("MCP infers create without script_id and update with script_id");
     expect(byName.get("flow_preview_script_change")?.inputSchema.properties?.ip_whitelist?.description)
-      .toContain("只改接口文档时必须省略");
-    expect(byName.get("flow_apply_script_change")?.description).toContain("用户随后明确确认发布");
+      .toContain("Omit for documentation-only updates");
+    expect(byName.get("flow_apply_script_change")?.description).toContain("user explicitly confirmed publication");
     expect(byName.get("flow_request_script_owner_challenge")?.inputSchema.properties?.action)
       .toMatchObject({ enum: ["lock", "unlock", "release"] });
     expect(byName.get("flow_release_script_ownership")?.annotations?.destructiveHint).toBe(true);
-    expect(byName.get("flow_release_script_ownership")?.description).toContain("已解锁");
+    expect(byName.get("flow_release_script_ownership")?.description).toContain("unlocked");
 
     for (const currentToolName of ["flow_get_script", "flow_get_script_documentation"]) {
       const currentTool = byName.get(currentToolName);
       expect(Object.keys(currentTool?.inputSchema.properties ?? {}), currentToolName).toEqual(["script_id"]);
-      expect(currentTool?.description, currentToolName).toContain("不接受也不要猜测 version");
+      expect(currentTool?.description, currentToolName).toContain("Pass only script_id");
     }
 
-    expect(byName.get("flow_get_script")?.description).toContain("MCP 会将 API 返回的 code_base64 解码为 code");
-    expect(byName.get("flow_get_script_version")?.description).toContain("MCP 会将 API 返回的 code_base64 解码为 code");
-    expect(byName.get("flow_token_info")?.description).toContain("token、access_token 等凭据字段会自动脱敏");
+    expect(byName.get("flow_get_script")?.description).toContain("decoded UTF-8 code");
+    expect(byName.get("flow_get_script_version")?.description).toContain("decoded UTF-8 code");
+    expect(byName.get("flow_token_info")?.description).toContain("Token and access-token fields are redacted");
 
     for (const historyToolName of ["flow_get_script_version", "flow_get_script_documentation_version"]) {
       const historyTool = byName.get(historyToolName);
       expect(historyTool?.inputSchema.required, historyToolName).toContain("version");
-      expect(historyTool?.description, historyToolName).toContain("仅当用户明确要求");
-      expect(historyTool?.description, historyToolName).toContain("不得猜测");
+      expect(historyTool?.description, historyToolName).toContain("explicitly requested");
+      expect(historyTool?.description, historyToolName).toContain("never be guessed");
     }
 
     const interfaceDoc = byName.get("flow_preview_script_change")?.inputSchema.properties?.interface_doc as
@@ -232,27 +252,26 @@ describe("MCP tool metadata", () => {
     expect(bodySchema?.properties).toMatchObject({
       content_type: { const: "application/json" },
       schema: { type: "object" },
-      example: { description: expect.stringContaining("完整请求体示例") },
+      example: { description: expect.stringContaining("complete request-body example") },
     });
     expect(interfaceDoc?.description).toContain("logic_description");
-    expect(interfaceDoc?.description).toContain("usage_refs 仅用于真实应用引用");
+    expect(interfaceDoc?.description).toContain("usage_refs is only for real application references");
     expect(interfaceDoc?.description).toContain("request={query?,headers?,body?}");
-    expect(interfaceDoc?.description).toContain("请求体或响应体的根 Schema 节点必须填写 type");
-    expect(interfaceDoc?.description).toContain("对象形式 additionalProperties 仅用于键名运行时才确定");
+    expect(interfaceDoc?.description).toContain("root Schema node for every request or response body");
+    expect(interfaceDoc?.description).toContain("homogeneous dictionaries with runtime-only keys");
     expect(interfaceDoc?.description).toContain("additionalProperties=true");
-    expect(interfaceDoc?.description).toContain("不得用 type=object、example={} 的 additionalProperties");
-    expect(interfaceDoc?.description).toContain("ip_whitelist 是 flow_preview_script_change 的工具参数");
-    expect(interfaceDoc?.description).toContain("schema.required 必须与 properties 同级");
-    expect(interfaceDoc?.description).toContain("schema.additionalProperties 也必须与 properties 同级");
-    expect(interfaceDoc?.description).toContain("items 本身必须填写 type、description 和 example");
-    expect(interfaceDoc?.description).toContain("平台内部输入术语会自动转换为调用方 HTTP 术语");
+    expect(interfaceDoc?.description).toContain("empty object Schema as an arbitrary-value fallback");
+    expect(interfaceDoc?.description).toContain("ip_whitelist-only updates may omit it");
+    expect(interfaceDoc?.description).toContain("properties, required, items, and additionalProperties inside schema");
+    expect(interfaceDoc?.description).toContain("Every type=array node must define items");
+    expect(interfaceDoc?.description).toContain("caller-facing URL query parameters");
     expect(byName.get("flow_preview_script_change")?.inputSchema.properties?.responses?.description)
-      .toContain("误放在工具参数层");
+      .toContain("misplaced at the tool-argument level");
     expect(byName.get("flow_preview_script_change")?.inputSchema.properties?.logic_description?.description)
-      .toContain("误放在工具参数层");
+      .toContain("misplaced at the tool-argument level");
     expect(byName.get("flow_write_code")?.inputSchema.properties?.requirement?.description)
-      .toContain("script 模式无需询问调用域名");
-    expect(byName.get("flow_apply_script_change")?.description).toContain("FLOW_CODEBLOCK_BASE_URL + /flow/codeblock/");
+      .toContain("does not require a caller domain");
+    expect(byName.get("flow_apply_script_change")?.description).toContain("built from FLOW_CODEBLOCK_BASE_URL");
     expect(byName.get("flow_apply_script_change")?.description).toContain("data.script_url");
 
     const toolsWithoutCallUrls = [

@@ -41,7 +41,7 @@ export function codeWriterContext(
     mode,
     requirement,
     mutates_or_executes: false,
-    instruction: "必须完整遵守 authoritative_rules.content；它直接读取权威规则文件，不是摘要。",
+    instruction: "Follow authoritative_rules.content in full; it is loaded directly from the authoritative rule file, not a summary.",
     authoritative_rules: {
       source: agentPromptSource,
       content: agentPrompt,
@@ -64,16 +64,16 @@ export function codeWriterContext(
       included: includeFullSchema,
       ...(includeFullSchema ? { value: interfaceDocSchema } : {}),
       loading: includeFullSchema
-        ? "已直接读取并返回权威 JSON Schema"
-        : "需要原始 JSON Schema 时重新调用 flow_write_code，并设置 include_full_schema=true",
+        ? "The authoritative JSON Schema was loaded and returned directly"
+        : "Call flow_write_code again with include_full_schema=true when the raw JSON Schema is required",
     },
     interface_document_patch_schema: {
       source: interfaceDocPatchSchemaSource,
       included: includeFullSchema,
       ...(includeFullSchema ? { value: interfaceDocPatchSchema } : {}),
       loading: includeFullSchema
-        ? "已直接读取并返回 RFC 6902 JSON Patch Schema"
-        : "更新已有脚本文档时可使用 interface_doc_patch；需要原始 Patch Schema 时重新调用 flow_write_code，并设置 include_full_schema=true",
+        ? "The RFC 6902 JSON Patch Schema was loaded and returned directly"
+        : "Use interface_doc_patch for existing-document updates; call flow_write_code again with include_full_schema=true when the raw Patch Schema is required",
     },
     next_tools: {
       preview_after_recursive_self_check: "flow_preview_script_change",

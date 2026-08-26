@@ -1,7 +1,7 @@
 {
   "name": "flow-codeblock",
-  "version": "0.2.6",
-  "description": "通过本地 stdio MCP 管理、校验、发布和执行 Flow Codeblock 脚本。",
+  "version": "0.3.0",
+  "description": "Manage, validate, publish, and execute Flow Codeblock scripts through a local stdio MCP server.",
   "license": "MIT",
   "repository": "https://github.com/renoelis/flow-codeblock-mcp",
   "author": {
@@ -10,15 +10,15 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Flow Codeblock",
-    "shortDescription": "管理和执行 Flow Codeblock 脚本",
-    "longDescription": "Flow Codeblock 提供本地 stdio MCP 工具和 Skill，用于非脚本代码编写与执行、脚本查询、接口文档生成、预览并确认脚本变更、管理脚本所有权状态，以及通过独立 Web worker lane 执行代码。插件不提供删除脚本或 token 管理工具。",
+    "shortDescription": "Manage and execute Flow Codeblock scripts",
+    "longDescription": "Flow Codeblock provides local stdio MCP tools and a Skill for non-script authoring and execution, script inspection, interface-document generation, preview-and-confirm changes, ownership management, and code execution in an isolated Web worker lane. The plugin provides no script-deletion or token-management tool.",
     "developerName": "Local developer",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],
     "defaultPrompt": [
-      "查询我的 Flow Codeblock token 和脚本",
-      "预览并确认一个脚本和接口文档更新",
-      "执行指定 Flow Codeblock 脚本并查看统计"
+      "Get my Flow Codeblock token and scripts",
+      "Preview and confirm a script and interface-document update",
+      "Execute a Flow Codeblock script and inspect statistics"
     ]
   },
   "mcpServers": "./.mcp.json"

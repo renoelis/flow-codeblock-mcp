@@ -25,15 +25,15 @@ describe("codeWriterContext", () => {
     const serialized = JSON.stringify(context);
     expect(serialized).toContain("FLOW_CODEBLOCK_BASE_URL");
     expect(serialized).toContain("data.script_url");
-    expect(serialized).not.toContain("用户未提供域名时先询问");
+    expect(serialized).not.toContain("ask the user for a domain");
   });
 
   test("distinguishes fixed objects from homogeneous dynamic dictionaries", () => {
     const context = codeWriterContext("script", "创建包含嵌套对象的接口");
     const rules = objectField(context, "authoritative_rules");
-    expect(rules.content).toContain("键名已知的对象必须用 `properties`");
-    expect(rules.content).toContain("不得用 `additionalProperties: {\"type\":\"object\",\"example\":{}}`");
-    expect(rules.content).toContain("同一状态码下字符串错误与对象错误等不同结构也应拆开描述");
+    expect(rules.content).toContain("Known object keys use `properties`");
+    expect(rules.content).toContain("empty object Schema as an arbitrary-value fallback");
+    expect(rules.content).toContain("Keep successful and error shapes in separate responses");
   });
 
   test("returns AGENT_PROMPT.md verbatim as the authoritative rule source", async () => {

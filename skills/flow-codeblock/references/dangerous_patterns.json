@@ -1,40 +1,40 @@
 {
-  "_comment": "危险关键词与成员模式列表；宿主机修改后重启服务生效，不支持接口热重载",
+  "_comment": "Dangerous keyword and member patterns. Host changes take effect after restart; hot reload is not supported.",
   "identifiers": {
-    "Function": "检测到 Function",
-    "Proxy": "检测到 Proxy",
-    "__proto__": "检测到 __proto__",
-    "child_process": "检测到 child_process",
-    "eval": "检测到 eval",
-    "exec": "检测到 exec",
-    "execFile": "检测到 execFile",
-    "execSync": "检测到 execSync",
-    "exports": "禁止使用 exports（CommonJS module/exports 已禁用）",
-    "fork": "检测到 fork",
-    "module": "禁止使用 module（CommonJS module/exports 已禁用）",
-    "spawn": "检测到 spawn",
-    "setImmediate": "检测到 setImmediate",
-    "setInterval": "检测到 setInterval",
-    "setTimeout": "检测到 setTimeout"
+    "Function": "Function detected",
+    "Proxy": "Proxy detected",
+    "__proto__": "__proto__ detected",
+    "child_process": "child_process detected",
+    "eval": "eval detected",
+    "exec": "exec detected",
+    "execFile": "execFile detected",
+    "execSync": "execSync detected",
+    "exports": "exports is forbidden (CommonJS module/exports is disabled)",
+    "fork": "fork detected",
+    "module": "module is forbidden (CommonJS module/exports is disabled)",
+    "spawn": "spawn detected",
+    "setImmediate": "setImmediate detected",
+    "setInterval": "setInterval detected",
+    "setTimeout": "setTimeout detected"
   },
   "members": {
     "Object": {
-      "getPrototypeOf": "检测到 Object.getPrototypeOf",
-      "setPrototypeOf": "检测到 Object.setPrototypeOf"
+      "getPrototypeOf": "Object.getPrototypeOf detected",
+      "setPrototypeOf": "Object.setPrototypeOf detected"
     },
     "Reflect": {
-      "apply": "检测到 Reflect.apply",
-      "construct": "检测到 Reflect.construct",
-      "get": "检测到 Reflect.get",
-      "set": "检测到 Reflect.set"
+      "apply": "Reflect.apply detected",
+      "construct": "Reflect.construct detected",
+      "get": "Reflect.get detected",
+      "set": "Reflect.set detected"
     },
     "process": {
-      "_linkedBinding": "检测到 process._linkedBinding",
-      "binding": "检测到 process.binding",
-      "dlopen": "检测到 process.dlopen",
-      "env": "用户代码不能读取服务器环境变量；第三方 API 密钥必须由调用方通过 input 传入",
-      "exit": "检测到 process.exit",
-      "kill": "检测到 process.kill"
+      "_linkedBinding": "process._linkedBinding detected",
+      "binding": "process.binding detected",
+      "dlopen": "process.dlopen detected",
+      "env": "User code must not read server environment variables; third-party API keys must be passed by the caller through input",
+      "exit": "process.exit detected",
+      "kill": "process.kill detected"
     }
   }
 }

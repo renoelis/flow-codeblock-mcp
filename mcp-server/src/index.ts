@@ -264,7 +264,7 @@ function assertNoUserEnvironmentAccess(code: string | undefined, codeBase64: str
   const source = code ?? (codeBase64 === undefined ? undefined : decodeScriptCode(codeBase64));
   if (source !== undefined && userEnvironmentAccessPattern.test(source)) {
     throw new Error(
-      "用户代码不能读取 process.env 或服务器环境变量；第三方 API 密钥必须由外部调用方通过请求体、查询参数或业务请求头传入，并同步写入接口文档",
+      "User code must not read process.env or server environment variables; third-party API keys must be supplied by the caller in the request body, query parameters, or business headers and documented in the interface contract",
     );
   }
 }
@@ -368,7 +368,7 @@ async function assertUpdateTarget(scriptId: string, expectedVersion: number): Pr
       success: false,
       error: {
         type: "VersionConflictError",
-        message: "脚本版本已变化，请重新读取脚本后再预览",
+        message: "The script version changed; read the script again before previewing",
         details: {
           script_id: scriptId,
           expected_version: expectedVersion,
@@ -414,42 +414,33 @@ async function revalidatePreview(
 }
 
 const serverInstructions = [
-  "Flow Codeblock MCP 可独立使用，不依赖 Skill。写代码前先调用 flow_write_code 获取对应模式的完整代码与输入契约。",
-  "非脚本模式：代码读取全局 input.<字段>；只写代码时不要执行，用户要求测试时调用 flow_execute_code。",
-  "脚本模式：代码读取 input.query/input.header/input.body/input.cookies；调用方 POST 时直接发送业务 JSON，不包装 input 或 input.body。创建时必须提交完整 interface_doc；更新代码时可提交完整 interface_doc 或 RFC 6902 interface_doc_patch。",
-  "最终用户交付按模式区分：non_script 输出 JavaScript、接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和完整 execution_url；script 不主动回显 JavaScript 或原始 interface_doc，只输出接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和发布后的完整 script_url，除非用户明确索要源码或原始文档。script 的代码与 interface_doc 仍必须内部提交给预览/发布工具。",
-  "用户代码中的 process 为 undefined，禁止读取 process.env 或假设服务器预置业务环境变量。第三方 API 密钥由外部调用方通过 input 对应的请求体、查询参数或业务请求头传入，并在接口文档中声明；FLOW_CODEBLOCK_TOKEN 仅供 MCP 平台认证。若配置 FLOW_CODEBLOCK_OWNER_EMAIL 或 FLOW_CODEBLOCK_OWNER_NAME，所有权工具中对应的当前所有者 email、owner_name 可以省略并使用默认值；显式传入的参数优先，所有权转移确认的新所有者信息必须明确传入。",
-  "读取当前脚本使用 flow_get_script 且只传 script_id，MCP 会固定以 version=0 标识当前版本；只有用户明确要求具体历史版本时才使用 flow_get_script_version。不得猜测 version，接口文档版本也不得猜测。",
-  "flow_get_script 和 flow_get_script_version 会把脚本详情中的 code_base64 解码为 UTF-8 code 返回；严格解码失败时保留原始 code_base64。",
-  "所有工具 JSON 出参会递归脱敏 token、access_token、authorization、refresh_token、qingcodeToken 等凭据字段；统计字段 token_cache、unique_tokens 不会被误处理。",
-  "释放所有权时先调用 flow_request_script_owner_challenge(action=release)，再使用同一脚本、邮箱和验证码调用 flow_release_script_ownership；脚本必须已解锁。",
-  "任何脚本变更都先调用 flow_preview_script_change；operation 建议显式传入，漏传时 MCP 根据 script_id 是否存在推断 create/update 并返回 input_normalizations。只有工具成功返回 preview_id 才能声称预览通过；此时所有 input/interface_doc normalizations 已写入该预览，requires_repreview=false，不得仅因发生兼容纠正就重写文档或再次预览。isError=true、-32602 或没有 preview_id 才表示失败，必须只修正错误指出的路径；只有向用户展示成功预览且获得明确确认后，才调用 flow_apply_script_change。不得把用户要求预览或修改视为发布确认。",
-  "脚本发布成功后直接使用 flow_apply_script_change 返回的 data.script_url；该地址由 MCP 使用 FLOW_CODEBLOCK_BASE_URL 和脚本 ID 生成，不要询问用户公网域名。",
-  "更新时只提交用户本次要求修改的字段；只改接口文档时省略 ip_whitelist。接口文档可用 RFC 6902 interface_doc_patch 增量修改，先读取当前文档并使用当前 canonical 数组索引；补丁与完整 interface_doc 不能同时提交。补丁错误只按返回的操作序号和路径修正，test 前置条件冲突时重新读取当前文档和版本，不要重写整份文档或回显敏感 value。预览返回 ignored_changes 表示对应字段已从发布载荷移除，不会修改该字段，也无需因此重新预览。",
-  "MCP 不提供删除工具。遇到删除请求必须拒绝调用其他工具替代删除，并告知用户通过 Flow Codeblock 网页或 REST DELETE /flow/scripts/{scriptId} 自行删除；删除前脚本必须已解锁且已释放所有权，仅解锁不能删除。",
-  "读取当前版本后再更新；版本冲突、404、锁定、限流、配额或校验失败时根据错误处理，不要用反复试调用探测参数。",
+  "Flow Codeblock MCP is self-contained. Before writing code, call flow_write_code and follow the returned authoritative AGENT_PROMPT.md.",
+  "Use flow_execute_code only when a non-script test or execution is explicitly requested. Use flow_preview_script_change before every script create/update, then call flow_apply_script_change only after the user explicitly confirms the displayed preview.",
+  "For current script reads use flow_get_script with only script_id; historical reads require an explicit version from the user or available_versions. Do not guess versions.",
+  "The server injects platform authentication from environment variables. Never place platform tokens, cookies, authorization headers, or verification codes in business inputs or user code.",
+  "MCP does not provide script deletion. Do not substitute another tool for deletion; direct the user to the Flow Codeblock web UI or REST API, after the script is unlocked and ownership is released.",
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.2.34" },
+  { name: "flow-codeblock", version: "0.3.0" },
   { instructions: serverInstructions },
 );
 
 server.registerTool(
   "flow_write_code",
   {
-    title: "获取 Flow JavaScript 编写契约",
-    description: "写任何 Flow Codeblock JavaScript 时首先调用。根据 mode 返回 AGENT_PROMPT.md 权威规则原文及后续工具流程，大模型必须完整遵守后再依据 requirement 生成代码；规则由文件运行时直接读取，不维护第二份摘要。本工具本身不生成、保存或执行代码。用户未指定模式时选 non_script；要求创建/更新持久脚本或 HTTP 重定向时选 script。non_script 从全局 input.<业务字段> 取值，并返回由 FLOW_CODEBLOCK_BASE_URL 生成的完整 execution_url；script 从 input.query/header/body/cookies 取值，内部生成并提交完整 script-interface-doc.v1，最终用户交付只展示接口调用说明、请求参数及示例、执行逻辑、成功/错误输出示例和 script_url，除非用户明确索要源码或原始文档。更新已有文档时可按需生成 RFC 6902 interface_doc_patch。用户代码不得读取 process.env，第三方 API 密钥必须由外部调用方通过 input 传入。完整接口文档和 Patch JSON Schema 体积较大，仅确实需要时设置 include_full_schema=true，此时同样直接读取权威 Schema 文件。",
+    title: "Get the Flow JavaScript authoring contract",
+    description: "Call this before writing any Flow Codeblock JavaScript. It returns the authoritative AGENT_PROMPT.md and the mode-specific next steps; this tool never generates, stores, or executes code. Use non_script unless the user requests a persistent script or HTTP redirect; use script for those cases. Set include_full_schema=true only when the complete interface or Patch Schema is required.",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       mode: z.enum(["non_script", "script"]).describe(
-        "生成模式。用户未说明时使用 non_script；non_script=即时执行且不保存。创建/更新持久脚本或要求 HTTP 重定向时必须使用 script，并生成独立接口文档。",
+        "Generation mode. Use non_script when unspecified for immediate, non-persistent execution. Use script for persistent create/update or HTTP redirects and produce a separate interface document.",
       ),
       requirement: z.string().min(1).max(20_000).describe(
-        "用户的完整业务需求、输入字段、预期输出、外部接口及边界条件。script 模式无需询问调用域名；发布工具会使用 MCP 环境变量 FLOW_CODEBLOCK_BASE_URL 返回最终 script_url。不要在这里放 access token。",
+        "The complete business requirement, input fields, expected output, external APIs, and edge cases. Script mode does not require a caller domain; publishing uses FLOW_CODEBLOCK_BASE_URL to return script_url. Do not include access tokens.",
       ),
       include_full_schema: z.boolean().optional().describe(
-        "是否额外返回权威 script-interface-doc.schema.json 的完整对象。通常省略或 false 以节省 Token；需要逐字段构造复杂接口文档时设 true。",
+        "Whether to include the complete authoritative script-interface-doc.schema.json object. Omit or set false to save tokens; set true when constructing a complex document field by field.",
       ),
     },
   },
@@ -464,8 +455,8 @@ server.registerTool(
 server.registerTool(
   "flow_token_info",
   {
-    title: "查询当前 Token 信息",
-    description: "只读查询 MCP 环境变量 FLOW_CODEBLOCK_TOKEN 对应的状态、元数据、执行配额、过期时间和脚本额度。返回中的 token、access_token 等凭据字段会自动脱敏。无需参数；不要让用户把 token 作为工具参数重复传入。",
+    title: "Get current token information",
+    description: "Read-only status, metadata, execution quota, expiration, and script quota for the FLOW_CODEBLOCK_TOKEN configured in this MCP process. Token and access-token fields are redacted in the response. Takes no arguments; never ask the user to pass the token again.",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {},
   },
@@ -482,17 +473,17 @@ server.registerTool(
 server.registerTool(
   "flow_list_scripts",
   {
-    title: "查询脚本列表",
-    description: "只读分页查询当前 token 名下的脚本，用于按名称/脚本 ID 定位目标并获取当前版本摘要。省略参数时使用服务端默认值；keyword 同时匹配描述和脚本 ID。需要代码、IP 白名单或准确 current_version 时继续调用 flow_get_script。",
+    title: "List scripts",
+    description: "Read-only paginated list of scripts owned by the current token. Use it to locate a script by description or script ID and obtain a current-version summary. Omitted parameters use server defaults; call flow_get_script for code, IP allowlists, or the exact current_version.",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
-      page: z.number().int().positive().optional().describe("页码，从 1 开始；省略时为第 1 页。"),
-      size: z.number().int().min(1).max(100).optional().describe("每页条数，1-100；省略时服务端默认 20。"),
-      keyword: z.string().optional().describe("可选搜索词，同时模糊匹配脚本 description 和 script_id。"),
+      page: z.number().int().positive().optional().describe("Page number starting at 1; defaults to page 1."),
+      size: z.number().int().min(1).max(100).optional().describe("Items per page, 1-100; defaults to the server value of 20."),
+      keyword: z.string().optional().describe("Optional search text matched against script description and script_id."),
       sort: z.enum(["updated_at", "created_at", "executions"]).optional().describe(
-        "排序字段：更新时间、创建时间或执行次数；省略时为 updated_at。",
+        "Sort field: updated_at, created_at, or executions; defaults to updated_at.",
       ),
-      order: z.enum(["asc", "desc"]).optional().describe("排序方向；省略时为 desc。"),
+      order: z.enum(["asc", "desc"]).optional().describe("Sort direction; defaults to desc."),
     },
   },
   async ({ page, size, keyword, sort, order }) => {
@@ -514,11 +505,11 @@ server.registerTool(
 server.registerTool(
   "flow_get_script",
   {
-    title: "读取当前脚本详情",
-    description: "只读查询当前 token 名下一个脚本的当前版本，包括 UTF-8 解码后的代码、描述、IP 白名单、锁定状态、current_version 和可用版本。MCP 会将 API 返回的 code_base64 解码为 code；无法严格解码时保留原始字段。调用方只需传 script_id，不接受也不要猜测 version；MCP 请求 API 时会固定附加 version=0，明确标识当前版本。准备更新时必须先调用，并使用响应中的 current_version 作为预览的 expected_version。需要历史版本时改用 flow_get_script_version。",
+    title: "Get the current script",
+    description: "Read the current version of one script, including decoded UTF-8 code, description, IP allowlist, lock state, current_version, and available versions. Pass only script_id; this tool always requests version=0. Before an update, use the returned current_version as expected_version. Use flow_get_script_version for an explicitly requested historical version.",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
-      script_id: z.string().min(1).describe("目标脚本 ID；来自 flow_list_scripts、创建结果或用户明确提供的 ID。"),
+      script_id: z.string().min(1).describe("Target script ID from flow_list_scripts, a create result, or the user."),
     },
   },
   async ({ script_id }) => {
@@ -533,12 +524,12 @@ server.registerTool(
 server.registerTool(
   "flow_get_script_version",
   {
-    title: "读取历史脚本版本",
-    description: "只读查询当前 token 名下一个脚本的指定历史版本，包括 UTF-8 解码后的代码、描述、IP 白名单、锁定状态、current_version 和可用版本。MCP 会将 API 返回的 code_base64 解码为 code；无法严格解码时保留原始字段。仅当用户明确要求查看某个具体历史版本时调用；version 必须来自用户要求或已读取的 available_versions，不得猜测。历史版本不能用于更新。",
+    title: "Get a historical script version",
+    description: "Read one explicitly requested historical script version, including decoded UTF-8 code, description, IP allowlist, lock state, current_version, and available versions. Call only when the user requests a specific version; version must come from the user or available_versions and must never be guessed. Historical versions cannot be updated.",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
-      script_id: z.string().min(1).describe("目标脚本 ID；来自脚本列表、当前脚本详情或用户明确提供的 ID。"),
-      version: z.number().int().positive().describe("要读取的明确历史版本号；必须来自用户要求或 available_versions，不得自行猜测。"),
+      script_id: z.string().min(1).describe("Target script ID from a script list, current details, or the user."),
+      version: z.number().int().positive().describe("Explicit historical version from the user or available_versions; never guess it."),
     },
   },
   async ({ script_id, version }) => {
@@ -555,11 +546,11 @@ server.registerTool(
 server.registerTool(
   "flow_get_script_documentation",
   {
-    title: "读取当前脚本接口文档",
-    description: "只读查询脚本当前版本的 script-interface-doc.v1。只需传 script_id，不接受也不要猜测 version。修改代码或文档前先读取当前文档，保留仍然有效的字段并与新代码同步；未保存文档时 document 可能为 null。需要历史文档时改用 flow_get_script_documentation_version。",
+    title: "Get the current script interface document",
+    description: "Read the script-interface-doc.v1 for the current script version. Pass only script_id; the current document is version-independent. Read it before changing code or documentation and preserve valid fields. document may be null when none is saved; use flow_get_script_documentation_version for history.",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
-      script_id: z.string().min(1).describe("目标脚本 ID；来自脚本列表、创建结果或用户明确提供的 ID。"),
+      script_id: z.string().min(1).describe("Target script ID from a script list, a create result, or the user."),
     },
   },
   async ({ script_id }) => {
@@ -574,12 +565,12 @@ server.registerTool(
 server.registerTool(
   "flow_get_script_documentation_version",
   {
-    title: "读取历史脚本接口文档",
-    description: "只读查询脚本指定历史版本的 script-interface-doc.v1。仅当用户明确要求查看某个具体历史版本的接口文档时调用；version 必须来自用户要求或已读取的 available_versions，不得猜测。未保存文档时 document 可能为 null，历史文档不能用于更新。",
+    title: "Get a historical script interface document",
+    description: "Read the script-interface-doc.v1 saved for one explicitly requested historical version. version must come from the user or available_versions and must never be guessed. document may be null when none is saved; historical documents cannot be used for updates.",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
-      script_id: z.string().min(1).describe("目标脚本 ID；来自脚本列表、当前脚本详情或用户明确提供的 ID。"),
-      version: z.number().int().positive().describe("要读取文档的明确历史版本号；必须来自用户要求或 available_versions，不得自行猜测。"),
+      script_id: z.string().min(1).describe("Target script ID from a script list, current details, or the user."),
+      version: z.number().int().positive().describe("Explicit historical version from the user or available_versions; never guess it."),
     },
   },
   async ({ script_id, version }) => {
@@ -596,15 +587,15 @@ server.registerTool(
 server.registerTool(
   "flow_request_script_owner_challenge",
   {
-    title: "申请脚本所有权验证码",
-    description: "锁定、解锁或释放所有权两步流程的第 1 步：向脚本所有者邮箱发送一次性验证码。随后根据 action 调用 flow_lock_script、flow_unlock_script 或 flow_release_script_ownership，并使用完全相同的 script_id 和 email。已有所有者时邮箱必须匹配；首次锁定可认领尚无所有者的脚本；release 仅适用于已解锁且已有所有者的脚本。发送验证码会产生外部邮件副作用，须基于用户明确请求调用。",
+    title: "Request an ownership verification code",
+    description: "Step 1 for locking, unlocking, or releasing ownership. Send a one-time code to the owner email, then call the matching step-2 tool with the same script_id and email. Existing ownership requires an email match; first lock can claim an unowned script; release requires an unlocked owned script. Sending email has an external side effect and requires an explicit user request.",
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     inputSchema: {
-      script_id: z.string().min(1).describe("要锁定、解锁或释放所有权的脚本 ID。"),
+      script_id: z.string().min(1).describe("Script ID to lock, unlock, or release ownership for."),
       action: z.enum(["lock", "unlock", "release"]).describe(
-        "验证码用途；必须与下一步 lock、unlock 或 release 工具完全一致。",
+        "Code purpose; must exactly match the next lock, unlock, or release tool.",
       ),
-      email: emailInput("接收验证码的所有者邮箱；下一步必须原样使用。省略时使用 FLOW_CODEBLOCK_OWNER_EMAIL。", true),
+      email: emailInput("Owner email that receives the code; pass it unchanged to the next step. Omit to use FLOW_CODEBLOCK_OWNER_EMAIL.", true),
     },
   },
   async ({ script_id, action, email }) => {
@@ -623,15 +614,15 @@ server.registerTool(
 server.registerTool(
   "flow_lock_script",
   {
-    title: "锁定脚本",
-    description: "锁定流程第 2 步：使用 flow_request_script_owner_challenge(action=lock) 发到同一 email 的验证码锁定脚本并设置所有者姓名。锁定后代码、接口文档、描述和 IP 白名单均不可编辑，直到成功解锁；只在用户明确要求锁定并提供验证码后调用。",
+    title: "Lock a script",
+    description: "Step 2 of locking: use the code from flow_request_script_owner_challenge(action=lock) sent to the same email. Locking prevents edits to code, interface documents, descriptions, and IP allowlists until unlock. Call only after the user explicitly requests locking and provides the code.",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     inputSchema: {
-      script_id: z.string().min(1).describe("申请 lock 验证码时使用的同一脚本 ID。"),
-      email: emailInput("申请 lock 验证码时使用的同一邮箱。省略时使用 FLOW_CODEBLOCK_OWNER_EMAIL。", true),
-      code: z.string().min(1).describe("邮箱收到的一次性 lock 验证码，不是 JavaScript 代码。"),
+      script_id: z.string().min(1).describe("The same script ID used to request the lock code."),
+      email: emailInput("The same email used to request the lock code. Omit to use FLOW_CODEBLOCK_OWNER_EMAIL.", true),
+      code: z.string().min(1).describe("The one-time lock code received by email, not JavaScript code."),
       owner_name: z.string().trim().min(1).max(100).optional().describe(
-        "脚本所有者显示名称，去除首尾空白后 1-100 个字符；省略时使用 FLOW_CODEBLOCK_OWNER_NAME。",
+        "Displayed script owner name, 1-100 characters after trimming; omit to use FLOW_CODEBLOCK_OWNER_NAME.",
       ),
     },
   },
@@ -652,13 +643,13 @@ server.registerTool(
 server.registerTool(
   "flow_unlock_script",
   {
-    title: "解锁脚本",
-    description: "解锁流程第 2 步：使用 flow_request_script_owner_challenge(action=unlock) 发到同一 email 的验证码解除锁定。解锁后可再次编辑，但所有者身份和姓名保留；只在用户明确要求解锁并提供验证码后调用。",
+    title: "Unlock a script",
+    description: "Step 2 of unlocking: use the code from flow_request_script_owner_challenge(action=unlock) sent to the same email. Unlocking permits edits while retaining owner identity and name. Call only after the user explicitly requests unlocking and provides the code.",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     inputSchema: {
-      script_id: z.string().min(1).describe("申请 unlock 验证码时使用的同一脚本 ID。"),
-      email: emailInput("申请 unlock 验证码时使用的同一所有者邮箱。省略时使用 FLOW_CODEBLOCK_OWNER_EMAIL。", true),
-      code: z.string().min(1).describe("邮箱收到的一次性 unlock 验证码。"),
+      script_id: z.string().min(1).describe("The same script ID used to request the unlock code."),
+      email: emailInput("The same owner email used to request the unlock code. Omit to use FLOW_CODEBLOCK_OWNER_EMAIL.", true),
+      code: z.string().min(1).describe("The one-time unlock code received by email."),
     },
   },
   async ({ script_id, email, code }) => {
@@ -677,13 +668,13 @@ server.registerTool(
 server.registerTool(
   "flow_release_script_ownership",
   {
-    title: "释放脚本所有权",
-    description: "释放所有权流程第 2 步：使用 flow_request_script_owner_challenge(action=release) 发到同一 email 的验证码，清除已解锁脚本的所有者邮箱和姓名，并作废待确认的所有权转移。释放后其他持有同一 Token 的用户可以重新认领并锁定脚本；只在当前所有者明确要求释放并提供验证码后调用。",
+    title: "Release script ownership",
+    description: "Step 2 of releasing ownership: use the code from flow_request_script_owner_challenge(action=release) sent to the same email. This clears the owner email and name on an unlocked script and cancels pending transfers, allowing another user with the same token to claim it. Call only after the current owner explicitly requests release and provides the code.",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     inputSchema: {
-      script_id: z.string().min(1).describe("申请 release 验证码时使用的同一已解锁脚本 ID。"),
-      email: emailInput("申请 release 验证码时使用的同一当前所有者邮箱。省略时使用 FLOW_CODEBLOCK_OWNER_EMAIL。", true),
-      code: z.string().min(1).describe("当前所有者邮箱收到的一次性 release 验证码。"),
+      script_id: z.string().min(1).describe("The same unlocked script ID used to request the release code."),
+      email: emailInput("The same current-owner email used to request the release code. Omit to use FLOW_CODEBLOCK_OWNER_EMAIL.", true),
+      code: z.string().min(1).describe("The one-time release code received by the current owner.") ,
     },
   },
   async ({ script_id, email, code }) => {
@@ -702,14 +693,14 @@ server.registerTool(
 server.registerTool(
   "flow_start_ownership_transfer",
   {
-    title: "发起脚本所有权转移",
-    description: "所有权转移两步流程的第 1 步。校验 authorizer_email 是当前所有者邮箱或脚本创建 Token 的登记邮箱，然后仅向 new_owner_email 发送验证码并返回 transfer_id；不会向授权邮箱发送验证码。只在用户明确要求转移且已确认新所有者信息后调用。",
+    title: "Start script ownership transfer",
+    description: "Step 1 of ownership transfer. Verify authorizer_email as the current owner email or the registration email for the script-creating token, then send a code only to new_owner_email and return transfer_id. No code is sent to the authorizer. Call only after the user explicitly requests transfer and confirms the new owner details.",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     inputSchema: {
-      script_id: z.string().min(1).describe("要转移所有权的脚本 ID。"),
-      authorizer_email: emailInput("当前所有者邮箱或创建该脚本的 Token 登记邮箱，仅用于授权校验。省略时使用 FLOW_CODEBLOCK_OWNER_EMAIL。", true),
-      new_owner_email: emailInput("新所有者邮箱；验证码将发送到这里，确认步骤必须使用同一邮箱。"),
-      new_owner_name: z.string().trim().min(1).max(100).describe("新所有者显示名称，去除首尾空白后 1-100 个字符。"),
+      script_id: z.string().min(1).describe("Script ID whose ownership should be transferred."),
+      authorizer_email: emailInput("Current owner email or the registration email of the script-creating token, used only for authorization. Omit to use FLOW_CODEBLOCK_OWNER_EMAIL.", true),
+      new_owner_email: emailInput("New owner email; the code is sent here and must be confirmed with the same email."),
+      new_owner_name: z.string().trim().min(1).max(100).describe("Displayed new owner name, 1-100 characters after trimming."),
     },
   },
   async ({ script_id, authorizer_email, new_owner_email, new_owner_name }) => {
@@ -728,14 +719,14 @@ server.registerTool(
 server.registerTool(
   "flow_confirm_ownership_transfer",
   {
-    title: "确认脚本所有权转移",
-    description: "所有权转移第 2 步：使用 flow_start_ownership_transfer 返回的 transfer_id，以及发到同一 new_owner_email 的验证码，原子完成所有者切换；脚本原有锁定状态保持不变。只在用户提供验证码并明确确认转移后调用。",
+    title: "Confirm script ownership transfer",
+    description: "Step 2 of ownership transfer: use the transfer_id returned by flow_start_ownership_transfer and the code sent to the same new_owner_email to atomically switch ownership. The script's lock state is preserved. Call only after the user provides the code and explicitly confirms the transfer.",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     inputSchema: {
-      script_id: z.string().min(1).describe("发起转移时使用的同一脚本 ID。"),
-      transfer_id: z.string().min(1).describe("flow_start_ownership_transfer 成功响应返回的不透明 transfer_id。"),
-      email: emailInput("发起转移时的 new_owner_email，必须完全相同。"),
-      code: z.string().min(1).describe("新所有者邮箱收到的一次性转移验证码。"),
+      script_id: z.string().min(1).describe("The same script ID used to start the transfer."),
+      transfer_id: z.string().min(1).describe("Opaque transfer_id returned by flow_start_ownership_transfer."),
+      email: emailInput("The exact new_owner_email used to start the transfer."),
+      code: z.string().min(1).describe("The one-time transfer code received by the new owner."),
     },
   },
   async ({ script_id, transfer_id, email, code }) => {
@@ -755,41 +746,41 @@ server.registerTool(
 
 const changeSchema = {
   operation: z.enum(["create", "update"]).optional().describe(
-    "建议显式传入：create=创建新脚本，update=修改现有脚本。省略时 MCP 根据 script_id 推断：未提供 script_id=create，已提供 script_id=update。create 必须带 code/code_base64 和完整 interface_doc，且不得带 script_id/expected_version；update 必须带 script_id/expected_version，并在 interface_doc 与 interface_doc_patch 中二选一。",
+    "Prefer explicit operation: create adds a script and update changes an existing script. If omitted, MCP infers create without script_id and update with script_id. Create requires code/code_base64 and a complete interface_doc and forbids script_id/expected_version; update requires script_id/expected_version and exactly one of interface_doc or interface_doc_patch.",
   ),
-  script_id: z.string().min(1).optional().describe("仅 update 必填；目标脚本 ID。create 时必须省略。"),
+  script_id: z.string().min(1).optional().describe("Required for update and forbidden for create; target script ID."),
   code: z.string().min(1).optional().describe(
-    "UTF-8 JavaScript 源码，与 code_base64 二选一。脚本代码从 input.query/header/body/cookies 读取请求，并以顶层 return 返回可 JSON 序列化结果；不得读取 process.env，第三方 API 密钥必须由外部调用方通过 input 传入；更新代码时必须提交完整 interface_doc 或 interface_doc_patch。",
+    "UTF-8 JavaScript source, mutually exclusive with code_base64. Script code reads requests from input.query/header/body/cookies and returns a JSON-serializable value with top-level return; it must not read process.env. Third-party API keys must be caller inputs. Code updates require a complete interface_doc or interface_doc_patch.",
   ),
   code_base64: z.string().min(1).optional().describe(
-    "已 Base64 编码的 UTF-8 JavaScript，与 code 二选一；通常优先直接传 code。更新代码时必须提交完整 interface_doc 或 interface_doc_patch。",
+    "Base64-encoded UTF-8 JavaScript, mutually exclusive with code; prefer code when possible. Code updates require a complete interface_doc or interface_doc_patch.",
   ),
   description: z.string().optional().describe(
-    "脚本列表展示名称/描述。创建时用户未指定则概括为 15 个字符以内；用户明确指定较长名称时不要擅自截断。单独修改 description 不生成新版本。",
+    "Script list display name/description. For create, summarize to at most 15 characters only when the user did not provide a name; preserve an explicitly supplied longer name. Changing description alone does not create a new version.",
   ),
   ip_whitelist: z.array(z.string()).nullable().optional().describe(
-    "仅在用户明确要求修改白名单时提交。允许调用脚本的 IP/CIDR 列表；省略=保持原值（创建时使用服务端默认），null 或 []=清除限制，非空数组=设置白名单。只改接口文档时必须省略；单独修改不生成新版本。",
+    "Submit only when the user explicitly requests an allowlist change. Array of allowed script IP/CIDR values; omit to keep the current value (server default on create), null or [] to clear, and a non-empty array to set. Omit for documentation-only updates; changing it alone does not create a new version.",
   ),
   interface_doc: interfaceDocToolInputSchema.optional(),
   interface_doc_patch: interfaceDocPatchSchema.optional().describe(
-    "仅 update 使用的 RFC 6902 JSON Patch 操作数组。先读取当前接口文档，path 按当前 canonical 文档解释；与 interface_doc 二选一，create 禁止使用。",
+    "RFC 6902 JSON Patch operations for update only. Read the current interface document first and interpret paths against its canonical array indexes. Mutually exclusive with interface_doc and forbidden for create.",
   ),
   responses: z.unknown().optional().describe(
-    "仅用于兼容纠错：误放在工具参数层的接口响应会自动移入 interface_doc.responses；新调用必须直接写入 interface_doc。",
+    "Compatibility recovery only: responses misplaced at the tool-argument level are moved to interface_doc.responses. New calls must put them directly in interface_doc.",
   ),
   logic_description: z.unknown().optional().describe(
-    "仅用于兼容纠错：误放在工具参数层的逻辑说明会自动移入 interface_doc.logic_description；新调用必须直接写入 interface_doc。",
+    "Compatibility recovery only: logic_description misplaced at the tool-argument level is moved to interface_doc.logic_description. New calls must put it directly in interface_doc.",
   ),
   expected_version: z.number().int().nonnegative().optional().describe(
-    "仅 update 必填且必须大于 0，取自刚刚 flow_get_script 返回的 current_version。版本变化会返回 409，此时重新读取并重新预览。create 时必须省略；兼容误传 0 并自动忽略。",
+    "Required for update and greater than 0; use the current_version returned by the latest flow_get_script call. A changed version returns 409, so read again and preview again. Omit for create; an accidentally supplied 0 is ignored for compatibility.",
   ),
 };
 
 server.registerTool(
   "flow_preview_script_change",
   {
-    title: "预览并校验脚本变更",
-    description: "任何脚本创建或更新的必经第 1 步，不写数据库、不扣执行配额，返回 10 分钟有效的 preview_id。若本轮还没有脚本代码与文档契约，先调用 flow_write_code(mode=script)，再一次性自检代码和完整 interface_doc；更新已有文档时可改用 RFC 6902 interface_doc_patch，避免重复重写未修改字段。operation 建议显式传入；漏传时 MCP 会按 script_id 是否存在推断 create/update，并通过 input_normalizations 说明。MCP 会先纠正 interface_doc 中可无歧义识别的常见位置错误，并在 interface_doc_normalizations 中返回修正记录；成功返回 preview_id 时这些纠正已经写入待发布预览，requires_repreview=false，不得仅因存在 normalizations 就重写文档或再次预览。仍有错误时必须保留原文档，仅修正错误列表中的路径，不得重写或删除其他字段。create：必须带 code/code_base64 和完整 interface_doc，不带 script_id/expected_version；description 未指定时建议不超过 15 个字符。update：先 flow_get_script 和 flow_get_script_documentation 读取当前版本，必须带 script_id、expected_version 和至少一个变更；interface_doc 与 interface_doc_patch 二选一，代码变化也可使用 interface_doc_patch；只提交本次确实要修改的字段，只改接口文档时必须省略 ip_whitelist；文档或代码变化生成新版本，仅 description/IP 变化不生成版本；ip_whitelist=null 或 [] 表示清除，与当前值相同的白名单会从更新中忽略并通过 ignored_changes 说明。ignored_changes 中的字段不会进入发布载荷，无需因此重新预览。更新会先校验脚本存在且版本未变。预览成功后先向用户展示结果，不能自动发布。MCP 不支持删除。",
+    title: "Preview and validate a script change",
+    description: "Required step 1 for every script create or update. It does not write the database or consume execution quota and returns a preview_id valid for 10 minutes. Call flow_write_code(mode=script) first when code and the document contract are not ready. For updates, use interface_doc_patch for field-only changes. The tool performs deterministic normalization and validation; a successful preview_id means normalized content is already stored with preview_ready=true and requires_repreview=false, so do not rewrite or preview again. Create requires code/code_base64 and a complete interface_doc without script_id/expected_version. Update requires a freshly read script_id and expected_version plus at least one change. Keep interface_doc and interface_doc_patch mutually exclusive and omit ip_whitelist for documentation-only updates. Show the successful preview to the user; never publish automatically. MCP does not provide deletion.",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     inputSchema: changeSchema,
   },
@@ -808,19 +799,19 @@ server.registerTool(
       if (requestedOperation === undefined) {
         inputNormalizations.push(
           rawChangeInput.script_id === undefined
-            ? "未传 operation，因未提供 script_id 已推断为 create"
-            : "未传 operation，因提供了 script_id 已推断为 update",
+            ? "operation omitted; inferred create because script_id was not provided"
+            : "operation omitted; inferred update because script_id was provided",
         );
       }
       if (changeInput.operation === "create" && changeInput.expected_version === 0) {
         delete changeInput.expected_version;
-        inputNormalizations.push("create 操作误传的 expected_version=0 已忽略；该字段仅用于 update");
+        inputNormalizations.push("expected_version=0 was ignored for create; this field applies only to update");
       }
       if (
         changeInput.interface_doc === undefined &&
         (misplacedResponses !== undefined || misplacedLogicDescription !== undefined)
       ) {
-        throw new Error("工具参数 responses/logic_description 只能用于纠正已有 interface_doc，不能替代 interface_doc");
+        throw new Error("Tool-level responses/logic_description are compatibility fields for an existing interface_doc and cannot replace interface_doc");
       }
       const interfaceDocNormalization = changeInput.interface_doc === undefined
         ? { document: undefined, changes: [], recovered: {} }
@@ -834,7 +825,7 @@ server.registerTool(
       ) {
         delete interfaceDocNormalization.recovered.ip_whitelist;
         interfaceDocNormalization.changes.push(
-          "interface_doc.ip_whitelist 已忽略；工具参数 ip_whitelist 已存在",
+          "interface_doc.ip_whitelist ignored because the tool-level ip_whitelist is present",
         );
       }
       if (
@@ -843,7 +834,7 @@ server.registerTool(
       ) {
         delete interfaceDocNormalization.recovered.description;
         interfaceDocNormalization.changes.push(
-          "interface_doc 中误放的 description 已忽略；工具参数 description 已存在",
+          "Misplaced interface_doc.description ignored because the tool-level description is present",
         );
       }
       const preparedInput = changeInput.interface_doc === undefined
@@ -865,7 +856,7 @@ server.registerTool(
         const normalizations = [...inputNormalizations, ...interfaceDocNormalization.changes];
         if (error instanceof Error && normalizations.length > 0) {
           throw new Error(
-            `${error.message}\n本次已自动规范化：\n- ${normalizations.join("\n- ")}`,
+            `${error.message}\nAutomatic normalizations applied in this call:\n- ${normalizations.join("\n- ")}`,
           );
         }
         throw error;
@@ -884,7 +875,7 @@ server.registerTool(
           ipWhitelistsEqual(currentIpWhitelist(currentScript), effectiveInput.ip_whitelist)
         ) {
           delete effectiveInput.ip_whitelist;
-          ignoredChanges.push("ip_whitelist 与当前值相同，已从本次变更中省略");
+          ignoredChanges.push("ip_whitelist matches the current value and was omitted from this change");
           assertScriptChangeInput(effectiveInput);
         }
       }
@@ -903,7 +894,7 @@ server.registerTool(
               ...(hasInterfaceDocPatch ? { interface_doc_patch: effectiveInput.interface_doc_patch } : {}),
             }),
           })
-        : { valid: true, warnings: [], message: "未提交代码或接口文档，仅更新描述/IP 白名单" };
+        : { valid: true, warnings: [], message: "No code or interface document submitted; only description/IP allowlist will be updated" };
       const previewValidation = hasInterfaceDocPatch
         ? compactPatchValidation(validation, effectiveInput.interface_doc_patch, currentVersion)
         : validation;
@@ -959,12 +950,12 @@ server.registerTool(
 server.registerTool(
   "flow_apply_script_change",
   {
-    title: "确认发布脚本变更",
-    description: "脚本变更第 2 步：仅在 flow_preview_script_change 成功、已向用户展示预览且用户随后明确确认发布时调用。传同一 MCP 进程最近 10 分钟内返回的 preview_id 和字面量 confirm=true；会重新校验内容与 update 版本，过期、变化、404、锁定或 409 均拒绝，需重新读取并预览。成功后创建或原子更新脚本，并在 data.script_url 返回由 FLOW_CODEBLOCK_BASE_URL + /flow/codeblock/{script_id} 生成的最终调用地址，无需询问用户域名。本工具不能删除脚本，也不能把用户最初的创建/更新请求推定为发布确认。",
+    title: "Confirm and apply a script change",
+    description: "Step 2 for a script change. Call only after flow_preview_script_change succeeded, the preview was shown, and the user explicitly confirmed publication. Pass the same preview_id from this MCP process (valid for 10 minutes) and confirm=true. Content, update version, expiration, 404, lock, and 409 checks are repeated; failures require a fresh read and preview. On success, create or atomically update the script and return data.script_url built from FLOW_CODEBLOCK_BASE_URL. This tool cannot delete scripts or infer publication confirmation from the original request.",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     inputSchema: {
-      preview_id: z.string().uuid().describe("flow_preview_script_change 成功响应中的 preview_id；10 分钟有效且仅限当前 MCP 进程。"),
-      confirm: z.literal(true).describe("必须为 true，并且只能在用户看过预览后明确确认发布时提交。"),
+      preview_id: z.string().uuid().describe("preview_id from a successful flow_preview_script_change call; valid for 10 minutes in this MCP process."),
+      confirm: z.literal(true).describe("Must be true and submitted only after the user has viewed and explicitly confirmed the preview."),
     },
   },
   async ({ preview_id }) => {
@@ -998,22 +989,22 @@ server.registerTool(
 server.registerTool(
   "flow_execute_script",
   {
-    title: "执行已发布脚本",
-    description: "按 GET/POST 调用已发布脚本进行真实测试或业务执行，并返回由 FLOW_CODEBLOCK_BASE_URL 生成的完整 script_url。调用前优先读取 flow_get_script_documentation，严格按文档传参。POST 的 body 就是调用方业务 JSON，不要包装为 {input:...} 或 {body:...}；平台运行时才把它构建到代码的 input.body。query/header 分别构建到 input.query/input.header。第三方 API 密钥属于业务输入，按接口文档通过 body/query/业务请求头传入；不得传平台 accessToken、Cookie、CSRF 或 MCP lane 标识，平台认证由 MCP 环境变量自动注入。每次调用都会扣配额、限流、审计并进入 Web worker lane；只在用户要求执行/测试时调用。",
+    title: "Execute a published script",
+    description: "Call a published script with GET or POST for a real test or business execution and return its complete script_url. Prefer flow_get_script_documentation first and follow it exactly. POST body is the caller's business JSON and must not be wrapped in input or body; query and headers are caller inputs. Do not pass platform accessToken, Cookie, CSRF, or x-flow-* headers; MCP injects platform authentication. Each call consumes quota and is rate-limited, audited, and executed in the Web worker lane. Call only when execution or testing is requested.",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     inputSchema: {
-      script_id: z.string().min(1).describe("要执行的已发布脚本 ID。"),
-      method: z.enum(["GET", "POST"]).default("POST").describe("接口请求方法，必须符合该脚本接口文档；默认 POST。"),
+      script_id: z.string().min(1).describe("Published script ID to execute."),
+      method: z.enum(["GET", "POST"]).default("POST").describe("HTTP method supported by the script interface document; defaults to POST."),
       query: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional().describe(
-        "调用方 URL 查询参数对象；值支持字符串/数字/布尔值。不得包含 qingcodeToken；超时请用 timeout_ms。",
+        "Caller URL query parameters; values may be strings, numbers, or booleans. Do not include qingcodeToken; use timeout_ms for timeouts.",
       ),
       headers: z.record(z.string(), z.string()).optional().describe(
-        "调用方业务请求头。不得包含 accessToken、Authorization、Cookie、CSRF 或 x-flow-* 内部头，这些会被过滤。",
+        "Caller business request headers. Do not include accessToken, Authorization, Cookie, CSRF, or internal x-flow-* headers; they are filtered.",
       ),
       body: z.unknown().optional().describe(
-        "仅 POST 使用的调用方业务 JSON，结构必须符合接口文档。直接传业务对象，不包装 input、input.body 或 body；GET 应省略。",
+        "Caller business JSON for POST only; it must match the interface document. Pass the business object directly without input, input.body, or body wrapping; omit for GET.",
       ),
-      timeout_ms: z.number().int().positive().optional().describe("可选脚本执行超时毫秒数，仍受服务端最小/最大限制。"),
+      timeout_ms: z.number().int().positive().optional().describe("Optional script execution timeout in milliseconds, still subject to server limits."),
     },
   },
   async ({ script_id, method, query, headers, body, timeout_ms }) => {
@@ -1037,7 +1028,7 @@ server.registerTool(
       }, true);
       return result({
         script_url: scriptUrl(script_id),
-        quota_notice: "本次执行已按普通执行请求处理并扣减配额。",
+        quota_notice: "This execution was handled as a normal request and consumed quota.",
         response,
       });
     } catch (error) {
@@ -1049,14 +1040,14 @@ server.registerTool(
 server.registerTool(
   "flow_execute_code",
   {
-    title: "执行非脚本 JavaScript",
-    description: "真实执行一次不保存的非脚本 JavaScript，并返回由 FLOW_CODEBLOCK_BASE_URL 生成的完整 execution_url。代码必须先按 flow_write_code(mode=non_script) 返回的契约生成：业务数据和第三方 API 密钥都从全局 input.<字段> 读取，不得读取 process.env；以顶层 return 返回可 JSON 序列化值；input 参数在此模式会原样成为全局 input。code 与 code_base64 必须且只能提供一个。调用会扣配额、限流、执行安全校验、审计并进入 Web worker lane；只写代码时不要调用，用户明确要求测试/执行时才调用。",
+    title: "Execute non-script JavaScript",
+    description: "Execute non-script JavaScript once without saving it and return the complete execution_url built from FLOW_CODEBLOCK_BASE_URL. Generate the code using flow_write_code(mode=non_script): read business data and third-party keys from global input, never process.env, and return a JSON-serializable value with top-level return. Provide exactly one of code or code_base64. Execution consumes quota and is rate-limited, security-checked, audited, and run in the Web worker lane. Do not call for code-only requests; call only when testing or execution is explicitly requested.",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     inputSchema: {
-      code: z.string().min(1).optional().describe("UTF-8 JavaScript 源码，与 code_base64 二选一；通常优先直接传 code。"),
-      code_base64: z.string().min(1).optional().describe("已 Base64 编码的 UTF-8 JavaScript，与 code 二选一。"),
-      input: z.unknown().optional().describe("业务输入对象，会原样成为代码中的全局 input；省略时为 {}。不要包装成 {input: ...}。"),
-      timeout_ms: z.number().int().positive().optional().describe("可选执行超时毫秒数，仍受服务端最小/最大限制。"),
+      code: z.string().min(1).optional().describe("UTF-8 JavaScript source, mutually exclusive with code_base64; prefer direct code."),
+      code_base64: z.string().min(1).optional().describe("Base64-encoded UTF-8 JavaScript, mutually exclusive with code."),
+      input: z.unknown().optional().describe("Business input copied to global input; defaults to {}. Do not wrap it as {input: ...}."),
+      timeout_ms: z.number().int().positive().optional().describe("Optional execution timeout in milliseconds, still subject to server limits."),
     },
   },
   async ({ code, code_base64, input: executionInput, timeout_ms }) => {
@@ -1074,7 +1065,7 @@ server.registerTool(
       return result({
         mode: "non_script",
         execution_url: `${baseUrl}/flow/codeblock`,
-        quota_notice: "本次非脚本执行已按普通执行请求处理并扣减配额。",
+        quota_notice: "This non-script execution was handled as a normal request and consumed quota.",
         response,
       });
     } catch (error) {
@@ -1086,14 +1077,14 @@ server.registerTool(
 server.registerTool(
   "flow_script_stats",
   {
-    title: "查询脚本执行统计",
-    description: "只读查询当前 token 名下一个脚本的执行统计。date 与 start_date/end_date 二选一：查询单日只传 date，查询范围同时传 start_date 和 end_date；全部省略时服务端返回最近 7 天。日期格式均为 YYYY-MM-DD。",
+    title: "Get script execution statistics",
+    description: "Read-only execution statistics for one script owned by the current token. Use either date for one day or start_date and end_date together for a range; omit all three for the most recent 7 days. Dates use YYYY-MM-DD.",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     inputSchema: {
-      script_id: z.string().min(1).describe("要查询统计的脚本 ID。"),
-      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("单日统计日期，YYYY-MM-DD；使用时不得再传 start_date/end_date。"),
-      start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("范围开始日期，YYYY-MM-DD；必须与 end_date 同时提供。"),
-      end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("范围结束日期，YYYY-MM-DD；必须与 start_date 同时提供。"),
+      script_id: z.string().min(1).describe("Script ID whose statistics should be queried."),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Single-day date, YYYY-MM-DD; do not combine with start_date/end_date."),
+      start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Range start date, YYYY-MM-DD; must be paired with end_date."),
+      end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Range end date, YYYY-MM-DD; must be paired with start_date."),
     },
   },
   async ({ script_id, date, start_date, end_date }) => {

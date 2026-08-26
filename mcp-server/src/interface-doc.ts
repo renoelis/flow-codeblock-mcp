@@ -19,84 +19,81 @@ export type InterfaceDocNormalization = {
 export const interfaceDocRequiredFields = {
   document: ["schema_version", "title", "summary", "endpoint", "responses", "logic_description"],
   endpoint: ["methods", "description"],
-  request: ["query/headers/body（仅在实际存在对应参数或 POST 请求体时填写）"],
-  parameter: ["name", "type", "description", "example", "required（运行时是否必填）"],
+  request: ["query/headers/body (include only fields that actually exist)"],
+  parameter: ["name", "type", "description", "example", "required (runtime requirement)"],
   body: ["content_type", "schema", "example"],
   response: ["status", "description", "content_type", "schema", "example"],
-  conditionally_optional: ["request（无查询参数、请求头和请求体时可省略）", "endpoint.path（创建可省略，更新必填实际路径）", "usage_refs（始终可省略）"],
+  conditionally_optional: ["request (omit when there are no query, header, or body fields)", "endpoint.path (omit on create, use the actual path on update)", "usage_refs (always optional)"],
 };
 
 export const interfaceDocNestedRules = [
-  "请求体或响应体的根 Schema 节点必须填写 type；其所有嵌套 Schema 节点（包括 properties 字段、array.items 和对象形式 additionalProperties 的值 Schema）都必须填写 type、description 和 example。",
-  "每个 Schema 节点自身的 example 都必须与该节点的 type、properties 和 required 一致；不能把外层完整响应示例误放进某个内层字段的 example。",
-  "JSON Schema 关键字名称只能使用字母开头的标准/扩展标识形式（可带 $ 前缀、数字、下划线、点或连字符）；:{ 等损坏键名必须删除。properties 内的业务字段名不受此限制。",
-  "代码或 example 中键名已知的对象必须用 properties 逐项描述；对象形式 additionalProperties 仅用于键名运行时才确定且所有值结构相同的动态字典，并描述单个动态值的完整 Schema。只有脚本原样透传且无法从代码、接口契约或示例确定结构的上游 JSON 对象，才使用 additionalProperties=true；不得用 type=object、example={} 的 additionalProperties 作为任意 JSON 值的兜底。",
-  "每个 type=array 都必须有 items，且 items 本身必须填写 type、description 和 example；items.type=object 时还必须有完整 items.properties。数组 example 中的每个对象都必须覆盖 items.properties 的全部字段。",
-  "任意层级 example 中出现的字段必须有对应 properties 或 additionalProperties，且 example 的 JSON 类型必须与 type 一致；properties 中列入 required 的字段必须出现在 example 中，运行时可选字段可以省略。",
-  "JSON Schema 的 required 只表示运行时真正必填的业务字段；成功和错误结构不同应拆成不同 responses。",
+  "The root Schema node for every request or response body must include type; every nested Schema node, including properties values, array.items, and object-form additionalProperties values, must include type, description, and example.",
+  "Each Schema node's example must match its type, properties, and required fields; never put a complete outer response example in an inner field example.",
+  "Schema keyword names must be valid standard or extension identifiers beginning with a letter or $, and damaged keys such as :{ must be removed; business property names are unrestricted.",
+  "Use properties for objects whose keys are known from code or examples. Use object-form additionalProperties only for homogeneous dictionaries with runtime-only keys. Use additionalProperties=true only for opaque upstream JSON passed through unchanged; never use an empty object Schema as an arbitrary-value fallback.",
+  "Every type=array node must define items with type, description, and example; object items must also define complete items.properties, and each array example object must cover those fields.",
+  "Every field in any example must be declared by properties or additionalProperties and have a matching JSON type; required fields must appear in examples, while runtime-optional fields may be omitted.",
+  "required declares only fields that are truly required at runtime; split success and error shapes into separate responses.",
 ];
 
 export const interfaceDocRepairRules = [
-  "保留原 interface_doc 中未报错的字段，只修正错误列表指出的路径；不要为了修复单个字段而重写或删减 responses、logic_description 或 request。",
-  "responses 和 logic_description 属于 interface_doc 根对象，request.body.example 与 schema 同级，properties、required、items、additionalProperties 属于 schema。MCP 会兼容纠正常见错位、从父级或同名蛇形/驼峰别名补全可推导的节点 example，并移除 usage_refs 中无效的非对象说明。",
-  "对象字段已能从代码或 example 确定时，在该对象上使用 properties 逐项描述；只有键名未知且每个动态值都符合同一 Schema 时才使用对象形式 additionalProperties。脚本原样透传且结构确实未知的上游 JSON 对象使用 additionalProperties=true；错误路径以 .additionalProperties 结尾且父对象键名已知时，应修正父对象的 properties，不要继续嵌套空 additionalProperties。",
-  "每个 example 的类型必须与对应 type 一致；同一状态码存在字符串错误和对象错误等不同结构时，拆成多个 responses 分别描述。",
-  "interface_doc 根对象只允许 schema_version/title/summary/endpoint/request/responses/logic_description/usage_refs；request 只允许 query/headers/body。ip_whitelist 是 flow_preview_script_change 的工具参数，不属于 interface_doc。",
-  "schema.properties 只能放字段名到字段 Schema 的映射；schema.required 必须与 properties 同级，schema.additionalProperties 也必须与 properties 同级，不能把 required: [] 或布尔 additionalProperties 放进 properties。",
-  "文档说明字段中的 input.query/input.header/input.body/input.cookies 等平台内部输入术语会自动转换为调用方 HTTP 术语；example、default 和 enum_values 中的业务值保持原样。新文档应直接使用 URL 查询参数、HTTP 请求头、HTTP 请求体和 Cookie。",
+  "Preserve every original interface_doc field not named by an error and repair only the reported paths; do not rewrite or remove responses, logic_description, or request to fix one field.",
+  "Keep responses and logic_description at the interface_doc root; keep request.body.example beside schema, and keep properties, required, items, and additionalProperties inside schema. The normalizer repairs only unambiguous placements, derives examples from parent or snake_case/camelCase aliases, and removes invalid non-object usage_refs entries.",
+  "When an object's keys are known, replace an incorrect additionalProperties shape with explicit properties. Do not nest empty additionalProperties when the parent keys are known.",
+  "Documentation prose must use caller-facing URL query parameters, HTTP headers, HTTP bodies, and Cookies; internal input.query/input.header/input.body/input.cookies terms are normalized when unambiguous, while business values in example, default, and enum_values remain unchanged.",
 ];
 
 export const interfaceDocInputDescription = [
-  "创建和代码更新时必填完整 script-interface-doc.v1；只改 description/ip_whitelist 时可省略。",
-  "字段位置：根对象包含 schema_version='script-interface-doc.v1'、title、summary、endpoint、request?、responses、logic_description、usage_refs?；endpoint={methods,path?,description}；request={query?,headers?,body?}；query/headers 为 parameter 数组；body={content_type='application/json',schema,example}；responses 的每项={status,description,content_type='application/json',schema,example}。",
-  "usage_refs 仅用于真实应用引用，每项必须是 {app_name,app_id?,location?,note?} 对象；普通说明写入 logic_description，不能把字符串数组放入 usage_refs。",
-  `必填结构：${Object.entries(interfaceDocRequiredFields).map(([key, fields]) => `${key}=[${fields.join(",")}]`).join("；")}。`,
+  "A complete script-interface-doc.v1 is required for create and code updates; description and ip_whitelist-only updates may omit it.",
+  "Root fields are schema_version='script-interface-doc.v1', title, summary, endpoint, request?, responses, logic_description, and usage_refs?. endpoint={methods,path?,description}; request={query?,headers?,body?}; query and headers are parameter arrays; body={content_type='application/json',schema,example}; each response={status,description,content_type='application/json',schema,example}.",
+  "usage_refs is only for real application references, each shaped as {app_name,app_id?,location?,note?}; put normal prose in logic_description, not a string array in usage_refs.",
+  `Required structure: ${Object.entries(interfaceDocRequiredFields).map(([key, fields]) => `${key}=[${fields.join(",")}]`).join("; ")}.`,
   ...interfaceDocRepairRules,
   ...interfaceDocNestedRules,
 ].join(" ");
 
 const looseSchemaNode = z.looseObject({
-  type: z.string().optional().describe("JSON Schema 类型，如 object、array、string、integer、number 或 boolean。"),
-  description: z.string().optional().describe("该节点表示的业务字段或数据结构说明。"),
-  example: z.unknown().optional().describe("与该节点 type 一致的具体示例值。"),
+  type: z.string().optional().describe("JSON Schema type, such as object, array, string, integer, number, or boolean."),
+  description: z.string().optional().describe("Description of the business field or data structure represented by this node."),
+  example: z.unknown().optional().describe("A concrete value matching this node's type."),
   properties: z.object({}).catchall(z.unknown()).optional().describe(
-    "固定对象字段到子 Schema 的映射；字段名直接作为 properties 的键。",
+    "Map fixed object fields to child Schemas; each field name is a properties key.",
   ),
-  items: z.unknown().optional().describe("数组元素的完整子 Schema。"),
+  items: z.unknown().optional().describe("The complete child Schema for each array item."),
   additionalProperties: z.unknown().optional().describe(
-    "对象 Schema 用于值结构相同的动态键字典；true 仅用于脚本原样透传且结构确实未知的上游 JSON 对象；false 表示不允许未声明字段。",
+    "Use an object Schema for homogeneous dynamic-key dictionaries; true is only for opaque upstream JSON passed through unchanged, and false disallows undeclared fields.",
   ),
-  required: z.array(z.string()).optional().describe("运行时真正必填的 properties 字段名。"),
+  required: z.array(z.string()).optional().describe("Names of properties that are truly required at runtime."),
 });
 
 const parameterInputSchema = z.looseObject({
-  name: z.string().optional().describe("调用方使用的查询参数或请求头名称。"),
+  name: z.string().optional().describe("The query parameter or request-header name used by the caller."),
   type: z.enum(["string", "integer", "number", "boolean", "array", "object"]).optional().describe(
-    "参数 JSON 类型。",
+    "The parameter JSON type.",
   ),
-  required: z.boolean().optional().describe("该参数在运行时是否必填。"),
-  description: z.string().optional().describe("参数用途和约束说明。"),
-  example: z.unknown().optional().describe("参数的具体示例值。"),
-  default: z.unknown().optional().describe("可选默认值。"),
-  format: z.string().optional().describe("可选格式提示。"),
-  enum_values: z.array(z.unknown()).optional().describe("可选枚举值列表。"),
+  required: z.boolean().optional().describe("Whether the parameter is required at runtime."),
+  description: z.string().optional().describe("The parameter's purpose and constraints."),
+  example: z.unknown().optional().describe("A concrete example value for the parameter."),
+  default: z.unknown().optional().describe("An optional default value."),
+  format: z.string().optional().describe("An optional format hint."),
+  enum_values: z.array(z.unknown()).optional().describe("An optional list of allowed values."),
 });
 
 const bodyInputSchema = z.looseObject({
-  content_type: z.literal("application/json").optional().describe("固定为 application/json。"),
-  schema: looseSchemaNode.optional().describe("调用方 POST 请求体的 JSON Schema。"),
-  example: z.unknown().optional().describe("与 schema 同级且结构一致的完整请求体示例。"),
+  content_type: z.literal("application/json").optional().describe("Must be application/json."),
+  schema: looseSchemaNode.optional().describe("The caller-facing JSON Schema for the POST body."),
+  example: z.unknown().optional().describe("A complete request-body example beside schema with the same shape."),
 });
 
 const responseInputSchema = z.looseObject({
-  status: z.number().int().min(100).max(599).optional().describe("HTTP 状态码，范围 100-599。"),
-  description: z.string().optional().describe("该响应分支的业务含义。"),
-  content_type: z.literal("application/json").optional().describe("固定为 application/json。"),
-  schema: looseSchemaNode.optional().describe("响应体 JSON Schema。"),
-  example: z.unknown().optional().describe("与 schema 同级且结构一致的完整响应示例。"),
+  status: z.number().int().min(100).max(599).optional().describe("HTTP status code from 100 through 599."),
+  description: z.string().optional().describe("The business meaning of this response branch."),
+  content_type: z.literal("application/json").optional().describe("Must be application/json."),
+  schema: looseSchemaNode.optional().describe("The response-body JSON Schema."),
+  example: z.unknown().optional().describe("A complete response example beside schema with the same shape."),
 });
 
-const patchPathSchema = z.string().describe("RFC 6901 JSON Pointer 路径；数组路径使用当前 canonical 文档的索引。");
+const patchPathSchema = z.string().describe("RFC 6901 JSON Pointer path; array paths use indexes in the current canonical document.");
 const interfaceDocPatchOperationSchema = z.union([
   z.object({ op: z.literal("add"), path: patchPathSchema, value: z.unknown() }).strict(),
   z.object({ op: z.literal("remove"), path: patchPathSchema }).strict(),
@@ -109,33 +106,33 @@ const interfaceDocPatchOperationSchema = z.union([
 export const interfaceDocPatchSchema = z.array(interfaceDocPatchOperationSchema)
   .min(1)
   .max(256)
-  .describe("RFC 6902 JSON Patch 操作数组；按顺序应用，不能与完整 interface_doc 同时提供。");
+  .describe("An ordered RFC 6902 JSON Patch operation array; mutually exclusive with a complete interface_doc.");
 
 export const interfaceDocToolInputSchema = z.looseObject({
-  schema_version: z.literal("script-interface-doc.v1").optional().describe("固定文档契约版本。"),
-  title: z.string().optional().describe("接口文档标题。"),
-  summary: z.string().optional().describe("面向调用方的一句话摘要。"),
+  schema_version: z.literal("script-interface-doc.v1").optional().describe("The fixed document contract version."),
+  title: z.string().optional().describe("The interface-document title."),
+  summary: z.string().optional().describe("A one-sentence caller-facing summary."),
   endpoint: z.looseObject({
-    methods: z.array(z.enum(["GET", "POST"])).optional().describe("接口支持的请求方法。"),
-    path: z.string().optional().describe("更新时填写实际 /flow/codeblock/{script_id} 路径。"),
-    description: z.string().optional().describe("接口用途说明。"),
-  }).optional().describe("脚本 HTTP 端点契约。"),
+    methods: z.array(z.enum(["GET", "POST"])).optional().describe("HTTP methods supported by the endpoint."),
+    path: z.string().optional().describe("The actual /flow/codeblock/{script_id} path for updates."),
+    description: z.string().optional().describe("What the endpoint does."),
+  }).optional().describe("The script HTTP endpoint contract."),
   request: z.looseObject({
-    query: z.array(parameterInputSchema).optional().describe("调用方 URL 查询参数。"),
-    headers: z.array(parameterInputSchema).optional().describe("调用方业务请求头。"),
-    body: bodyInputSchema.optional().describe("POST 请求体；example 必须与 schema 同级。"),
-  }).optional().describe("调用方请求契约；只能包含 query、headers 和 body。"),
-  responses: z.array(responseInputSchema).optional().describe("完整响应分支数组，属于 interface_doc 根对象。"),
-  logic_description: z.string().optional().describe("接口处理逻辑，属于 interface_doc 根对象且至少 20 个字符。"),
+    query: z.array(parameterInputSchema).optional().describe("Caller-facing URL query parameters."),
+    headers: z.array(parameterInputSchema).optional().describe("Caller-facing business request headers."),
+    body: bodyInputSchema.optional().describe("POST body; example must be beside schema."),
+  }).optional().describe("Caller request contract; only query, headers, and body are allowed."),
+  responses: z.array(responseInputSchema).optional().describe("Complete response branches at the interface_doc root."),
+  logic_description: z.string().optional().describe("Endpoint processing logic at the interface_doc root; at least 20 characters."),
   usage_refs: z.array(z.unknown()).optional().describe(
-    "真实应用引用对象数组，每项为 {app_name,app_id?,location?,note?}；普通说明不要放在这里。",
+    "Array of real application references, each {app_name,app_id?,location?,note?}; do not put ordinary prose here.",
   ),
 }).describe(interfaceDocInputDescription);
 
 export function assertInterfaceDocPatch(patch: unknown): void {
   const parsed = interfaceDocPatchSchema.safeParse(patch);
   if (!parsed.success) {
-    throw new Error(`interface_doc_patch 格式无效：${parsed.error.message}`);
+    throw new Error(`Invalid interface_doc_patch format: ${parsed.error.message}`);
   }
 }
 
@@ -162,7 +159,7 @@ function normalizeSchemaNodeExamples(
   if (schema.type === "array" && isObject(schema.items)) {
     if (!hasOwn(schema.items, "example") && Array.isArray(example) && example.length > 0) {
       schema.items.example = structuredClone(example[0]);
-      changes.push(`${path}.items.example 已从数组示例首项补全`);
+      changes.push(`${path}.items.example was filled from the first array example item`);
     }
     normalizeSchemaNodeExamples(schema.items, schema.items.example, `${path}.items`, changes);
     return;
@@ -175,9 +172,9 @@ function normalizeSchemaNodeExamples(
   if (misplacedRequired && misplacedRequired.every((field) => typeof field === "string")) {
     if (!hasOwn(schema, "required")) {
       schema.required = structuredClone(misplacedRequired);
-      changes.push(`${path}.properties.required 已移入 ${path}.required`);
+      changes.push(`${path}.properties.required moved to ${path}.required`);
     } else {
-      changes.push(`${path}.properties.required 已移除；${path}.required 已存在`);
+      changes.push(`${path}.properties.required removed because ${path}.required already exists`);
     }
     delete (schema.properties as JsonObject).required;
   }
@@ -187,9 +184,9 @@ function normalizeSchemaNodeExamples(
   if (typeof misplacedAdditionalProperties === "boolean") {
     if (!hasOwn(schema, "additionalProperties")) {
       schema.additionalProperties = misplacedAdditionalProperties;
-      changes.push(`${path}.properties.additionalProperties 已移入 ${path}.additionalProperties`);
+      changes.push(`${path}.properties.additionalProperties moved to ${path}.additionalProperties`);
     } else {
-      changes.push(`${path}.properties.additionalProperties 已移除；${path}.additionalProperties 已存在`);
+      changes.push(`${path}.properties.additionalProperties removed because ${path}.additionalProperties already exists`);
     }
     delete (schema.properties as JsonObject).additionalProperties;
   }
@@ -206,7 +203,7 @@ function normalizeSchemaNodeExamples(
         hasOwn(objectExample, key)
       ) {
         propertySchema.example = structuredClone(objectExample[key]);
-        changes.push(`${path}.properties.${key}.example 已从父级示例补全`);
+        changes.push(`${path}.properties.${key}.example was filled from the parent example`);
       }
     }
 
@@ -222,7 +219,7 @@ function normalizeSchemaNodeExamples(
         ));
         if (alias && isObject(alias[1])) {
           propertySchema.example = structuredClone(alias[1].example);
-          changes.push(`${path}.properties.${key}.example 已从别名 ${path}.properties.${alias[0]}.example 补全`);
+          changes.push(`${path}.properties.${key}.example was filled from alias ${path}.properties.${alias[0]}.example`);
         }
       }
     }
@@ -245,7 +242,7 @@ function normalizeSchemaNodeExamples(
       : undefined;
     if (!hasOwn(schema.additionalProperties, "example") && dynamicExample !== undefined) {
       schema.additionalProperties.example = structuredClone(dynamicExample);
-      changes.push(`${path}.additionalProperties.example 已从动态字段示例补全`);
+      changes.push(`${path}.additionalProperties.example was filled from a dynamic-field example`);
     }
     normalizeSchemaNodeExamples(
       schema.additionalProperties,
@@ -287,7 +284,7 @@ function recoverMisplacedContainerExample(container: JsonObject, path: string, c
   ) {
     container.example = structuredClone(properties.example);
     delete properties.example;
-    changes.push(`${path}.example 已从 ${path}.schema.properties.example 提升`);
+    changes.push(`${path}.example was promoted from ${path}.schema.properties.example`);
     return;
   }
 
@@ -302,7 +299,7 @@ function recoverMisplacedContainerExample(container: JsonObject, path: string, c
     }
     container.example = structuredClone(propertySchema.example);
     delete propertySchema.example;
-    changes.push(`${path}.example 已从误放的 ${path}.schema.properties.${name}.example 提升`);
+    changes.push(`${path}.example was promoted from misplaced ${path}.schema.properties.${name}.example`);
     return;
   }
 }
@@ -314,13 +311,13 @@ function normalizeSchemaContainer(container: JsonObject, path: string, changes: 
     if (hasOwn(container, key) && !hasOwn(container.schema, key)) {
       container.schema[key] = container[key];
       delete container[key];
-      changes.push(`${path}.${key} 已移入 ${path}.schema.${key}`);
+      changes.push(`${path}.${key} moved to ${path}.schema.${key}`);
     }
   }
 
   if (!hasOwn(container, "example") && hasOwn(container.schema, "example")) {
     container.example = structuredClone(container.schema.example);
-    changes.push(`${path}.example 已从 ${path}.schema.example 提升`);
+    changes.push(`${path}.example was promoted from ${path}.schema.example`);
   }
   recoverMisplacedContainerExample(container, path, changes);
   normalizeSchemaNodeExamples(container.schema, container.example, `${path}.schema`, changes);
@@ -338,7 +335,7 @@ function normalizeUsageRefs(document: JsonObject, changes: string[]): void {
     document.usage_refs = validRefs;
   }
   changes.push(
-    `interface_doc.usage_refs 已移除 ${removedCount} 个非对象条目；普通说明应写入 logic_description`,
+    `Removed ${removedCount} non-object entries from interface_doc.usage_refs; ordinary prose belongs in logic_description`,
   );
 }
 
@@ -346,16 +343,16 @@ const documentationProseKeys = new Set(["summary", "description", "logic_descrip
 const documentationValueKeys = new Set(["example", "default", "enum_values"]);
 const internalInputTermPattern = /\binput\.(?:query|header|body|cookies)\b/i;
 const internalInputPhraseReplacements: Array<[RegExp, string]> = [
-  [/从\s*\binput\.query\b\s*读取(?:URL\s*)?查询参数/gi, "读取 URL 查询参数"],
-  [/从\s*\binput\.header\b\s*读取(?:HTTP\s*)?请求头/gi, "读取 HTTP 请求头"],
-  [/从\s*\binput\.body\b\s*读取(?:HTTP\s*)?请求体/gi, "读取 HTTP 请求体"],
-  [/从\s*\binput\.cookies\b\s*读取\s*Cookie/gi, "读取 Cookie"],
+  [/\u4ece\s*\binput\.query\b\s*\u8bfb\u53d6(?:URL\s*)?\u67e5\u8be2\u53c2\u6570/gi, "URL query parameters"],
+  [/\u4ece\s*\binput\.header\b\s*\u8bfb\u53d6(?:HTTP\s*)?\u8bf7\u6c42\u5934/gi, "HTTP headers"],
+  [/\u4ece\s*\binput\.body\b\s*\u8bfb\u53d6(?:HTTP\s*)?\u8bf7\u6c42\u4f53/gi, "HTTP body"],
+  [/\u4ece\s*\binput\.cookies\b\s*\u8bfb\u53d6\s*Cookie/gi, "Cookies"],
 ];
 const internalInputTermReplacements: Array<[RegExp, string]> = [
-  [/\binput\.query\b/gi, "URL 查询参数"],
-  [/\binput\.header\b/gi, "HTTP 请求头"],
-  [/\binput\.body\b/gi, "HTTP 请求体"],
-  [/\binput\.cookies\b/gi, "Cookie"],
+  [/\binput\.query\b/gi, "URL query parameters"],
+  [/\binput\.header\b/gi, "HTTP headers"],
+  [/\binput\.body\b/gi, "HTTP body"],
+  [/\binput\.cookies\b/gi, "Cookies"],
 ];
 
 function publicDocumentationText(value: string): string {
@@ -368,7 +365,7 @@ function publicDocumentationText(value: string): string {
     phraseRewritten,
   );
   return rewritten
-    .replace(/(URL 查询参数|HTTP 请求头|HTTP 请求体|Cookie)\s+(?=[\u3400-\u9fff])/g, "$1");
+    .replace(/(URL query parameters|HTTP headers|HTTP body|Cookies)\s+(?=[\u3400-\u9fff])/g, "$1");
 }
 
 function normalizeInternalInputTerms(value: unknown, path: string, changes: string[]): void {
@@ -384,7 +381,7 @@ function normalizeInternalInputTerms(value: unknown, path: string, changes: stri
       const rewritten = publicDocumentationText(item);
       if (rewritten !== item) {
         value[key] = rewritten;
-        changes.push(`${itemPath} 已将平台内部输入术语转换为调用方 HTTP 术语`);
+        changes.push(`${itemPath} converted an internal input term to caller-facing HTTP terminology`);
       }
       continue;
     }
@@ -402,11 +399,11 @@ function recoverInterfaceDocRootFields(
   for (const key of ["responses", "logic_description"] as const) {
     if (recoveryFields[key] === undefined) continue;
     if (hasOwn(document, key)) {
-      changes.push(`工具参数 ${key} 已忽略；interface_doc.${key} 已存在`);
+      changes.push(`Tool-level ${key} was ignored because interface_doc.${key} already exists`);
       continue;
     }
     document[key] = structuredClone(recoveryFields[key]);
-    changes.push(`工具参数 ${key} 已移入 interface_doc.${key}`);
+    changes.push(`Tool-level ${key} moved to interface_doc.${key}`);
   }
 }
 
@@ -420,12 +417,12 @@ function recoverDocumentRootFields(
     if (!hasOwn(container, key)) continue;
     if (hasOwn(document, key)) {
       delete container[key];
-      changes.push(`${path}.${key} 已移除；interface_doc.${key} 已存在`);
+      changes.push(`${path}.${key} removed because interface_doc.${key} already exists`);
       continue;
     }
     document[key] = container[key];
     delete container[key];
-    changes.push(`${path}.${key} 已移入 interface_doc.${key}`);
+    changes.push(`${path}.${key} moved to interface_doc.${key}`);
   }
 }
 
@@ -439,7 +436,7 @@ function recoverToolField(
   if (!hasOwn(container, key)) return;
   if (!hasOwn(recovered, key)) recovered[key] = container[key];
   delete container[key];
-  changes.push(`${path}.${key} 已移回 flow_preview_script_change.${key}`);
+  changes.push(`${path}.${key} moved back to flow_preview_script_change.${key}`);
 }
 
 export function normalizeInterfaceDocument(
@@ -470,9 +467,9 @@ export function normalizeInterfaceDocument(
     if (hasOwn(normalized.request, "example")) {
       if (!hasOwn(normalized.request.body, "example")) {
         normalized.request.body.example = structuredClone(normalized.request.example);
-        changes.push("interface_doc.request.example 已移入 interface_doc.request.body.example");
+        changes.push("interface_doc.request.example moved to interface_doc.request.body.example");
       } else {
-        changes.push("interface_doc.request.example 已移除；interface_doc.request.body.example 已存在");
+        changes.push("interface_doc.request.example removed because interface_doc.request.body.example already exists");
       }
       delete normalized.request.example;
     }
@@ -484,7 +481,7 @@ export function normalizeInterfaceDocument(
         const responsePath = `interface_doc.responses[${index}]`;
         if (hasOwn(response, "responses_placeholder") && response.responses_placeholder === null) {
           delete response.responses_placeholder;
-          changes.push(`${responsePath}.responses_placeholder 空占位字段已移除`);
+          changes.push(`${responsePath}.responses_placeholder empty placeholder removed`);
         }
         normalizeSchemaContainer(response, responsePath, changes);
       }
@@ -497,7 +494,7 @@ export function normalizeInterfaceDocument(
 function requireText(object: JsonObject, key: string, path: string, issues: string[], minLength = 1): void {
   const value = object[key];
   if (typeof value !== "string" || value.trim().length < minLength) {
-    issues.push(`${path}.${key} 必须是至少 ${minLength} 个字符的非空字符串`);
+    issues.push(`${path}.${key} must be a non-empty string with at least ${minLength} character(s)`);
   }
 }
 
@@ -509,18 +506,18 @@ function rejectUnsupportedFields(
 ): void {
   for (const key of Object.keys(object)) {
     if (!supportedFields.includes(key)) {
-      issues.push(`${path}.${key} 不是支持的字段`);
+      issues.push(`${path}.${key} is not a supported field`);
     }
   }
 }
 
 function validateFieldSchemaMetadata(schema: JsonObject, schemaPath: string, issues: string[]): void {
   if (typeof schema.type !== "string" || schema.type.trim().length === 0) {
-    issues.push(`${schemaPath}.type 必须填写`);
+    issues.push(`${schemaPath}.type is required`);
   }
   requireText(schema, "description", schemaPath, issues);
   if (!hasOwn(schema, "example")) {
-    issues.push(`${schemaPath}.example 必须填写字段示例值`);
+    issues.push(`${schemaPath}.example must provide a field example`);
   }
 }
 
@@ -535,7 +532,7 @@ function validateSchemaExampleCoverage(
 ): void {
   if (root) {
     if (typeof schema.type !== "string" || schema.type.trim().length === 0) {
-      issues.push(`${schemaPath}.type 必须填写`);
+      issues.push(`${schemaPath}.type is required`);
     }
   } else if (!metadataValidated) {
     validateFieldSchemaMetadata(schema, schemaPath, issues);
@@ -546,17 +543,17 @@ function validateSchemaExampleCoverage(
     schema.type !== "object" &&
     !exampleMatchesType(schema.type, example)
   ) {
-    issues.push(`${examplePath} 类型必须与 ${schemaPath}.type=${String(schema.type)} 一致`);
+    issues.push(`${examplePath} must match ${schemaPath}.type=${String(schema.type)}`);
     return;
   }
 
   if (schema.type === "array") {
     if (!Array.isArray(example)) {
-      issues.push(`${examplePath} 必须是数组`);
+      issues.push(`${examplePath} must be an array`);
       return;
     }
     if (!isObject(schema.items) || Object.keys(schema.items).length === 0) {
-      issues.push(`${schemaPath}.items 必须完整描述数组元素`);
+      issues.push(`${schemaPath}.items must fully describe array elements`);
       return;
     }
     validateFieldSchemaMetadata(schema.items, `${schemaPath}.items`, issues);
@@ -582,14 +579,14 @@ function validateSchemaExampleCoverage(
     typeof additionalPropertiesValue !== "boolean" &&
     !additionalProperties
   ) {
-    issues.push(`${schemaPath}.additionalProperties 必须是布尔值或对象 Schema`);
+    issues.push(`${schemaPath}.additionalProperties must be a boolean or object Schema`);
   }
   if (!properties && !additionalProperties && !allowsOpaqueProperties) {
-    issues.push(`${schemaPath} 必须使用 properties 描述固定字段、使用 additionalProperties 描述同构动态键，或对原样透传且结构未知的上游 JSON 使用 additionalProperties=true`);
+    issues.push(`${schemaPath} must use properties for fixed fields, object-form additionalProperties for homogeneous dynamic keys, or additionalProperties=true for opaque upstream JSON`);
     return;
   }
   if (!isObject(example)) {
-    issues.push(`${examplePath} 必须是对象，并与 ${schemaPath}.properties 逐层对应`);
+    issues.push(`${examplePath} must be an object matching ${schemaPath}.properties`);
     return;
   }
 
@@ -606,13 +603,13 @@ function validateSchemaExampleCoverage(
     for (const [key, propertySchema] of Object.entries(properties)) {
       const propertyPath = `${schemaPath}.properties.${key}`;
       if (!isObject(propertySchema)) {
-        issues.push(`${propertyPath} 必须是对象 Schema，并填写 type、description、example`);
+        issues.push(`${propertyPath} must be an object Schema with type, description, and example`);
         continue;
       }
       validateFieldSchemaMetadata(propertySchema, propertyPath, issues);
       if (!hasOwn(example, key)) {
         if (requiredFields.has(key)) {
-          issues.push(`${examplePath} 缺少 required 字段 ${key}`);
+          issues.push(`${examplePath} is missing required field ${key}`);
         }
       } else {
         validateSchemaExampleCoverage(propertySchema, example[key], propertyPath, `${examplePath}.${key}`, issues, false, true);
@@ -634,7 +631,7 @@ function validateSchemaExampleCoverage(
     } else if (allowsOpaqueProperties) {
       continue;
     } else {
-      issues.push(`${schemaPath}.properties 缺少字段 ${key} 的 Schema 描述`);
+      issues.push(`${schemaPath}.properties is missing a Schema for field ${key}`);
     }
   }
 }
@@ -644,7 +641,7 @@ const schemaKeywordPattern = /^\$?[A-Za-z][A-Za-z0-9_.-]*$/;
 function validateSchemaKeywordNames(schema: JsonObject, path: string, issues: string[]): void {
   for (const key of Object.keys(schema)) {
     if (!schemaKeywordPattern.test(key)) {
-      issues.push(`${path}.${key} 不是合法的 JSON Schema 关键字`);
+      issues.push(`${path}.${key} is not a valid JSON Schema keyword`);
     }
   }
 
@@ -693,13 +690,13 @@ function validateDeclaredSchemaExamples(schema: JsonObject, path: string, issues
 
 function validateSchemaAndExample(object: JsonObject, path: string, issues: string[]): void {
   if (object.content_type !== "application/json") {
-    issues.push(`${path}.content_type 必须是 application/json`);
+    issues.push(`${path}.content_type must be application/json`);
   }
   if (!isObject(object.schema) || Object.keys(object.schema).length === 0) {
-    issues.push(`${path}.schema 必须填写非空的响应体或请求体 JSON Schema`);
+    issues.push(`${path}.schema must be a non-empty request or response JSON Schema`);
   }
   if (!hasOwn(object, "example")) {
-    issues.push(`${path}.example 必须填写与 schema 一致的完整示例值`);
+    issues.push(`${path}.example must provide a complete value matching schema`);
   }
   if (isObject(object.schema)) {
     validateSchemaKeywordNames(object.schema, `${path}.schema`, issues);
@@ -713,13 +710,13 @@ function validateSchemaAndExample(object: JsonObject, path: string, issues: stri
 function validateParameters(value: unknown, path: string, issues: string[]): void {
   if (value === undefined) return;
   if (!Array.isArray(value)) {
-    issues.push(`${path} 如填写必须是数组`);
+    issues.push(`${path} must be an array when provided`);
     return;
   }
   value.forEach((parameter, index) => {
     const itemPath = `${path}[${index}]`;
     if (!isObject(parameter)) {
-      issues.push(`${itemPath} 必须是对象`);
+      issues.push(`${itemPath} must be an object`);
       return;
     }
     rejectUnsupportedFields(
@@ -731,13 +728,13 @@ function validateParameters(value: unknown, path: string, issues: string[]): voi
     requireText(parameter, "name", itemPath, issues);
     requireText(parameter, "description", itemPath, issues);
     if (!["string", "integer", "number", "boolean", "array", "object"].includes(String(parameter.type))) {
-      issues.push(`${itemPath}.type 必须填写支持的参数类型`);
+      issues.push(`${itemPath}.type must be a supported parameter type`);
     }
     if (typeof parameter.required !== "boolean") {
-      issues.push(`${itemPath}.required 必须是布尔值`);
+      issues.push(`${itemPath}.required must be a boolean`);
     }
     if (!hasOwn(parameter, "example")) {
-      issues.push(`${itemPath}.example 必须填写具体示例值`);
+      issues.push(`${itemPath}.example must provide a concrete example value`);
     }
   });
 }
@@ -745,27 +742,27 @@ function validateParameters(value: unknown, path: string, issues: string[]): voi
 function validateUsageRefs(value: unknown, issues: string[]): void {
   if (value === undefined) return;
   if (!Array.isArray(value)) {
-    issues.push("interface_doc.usage_refs 如填写必须是对象数组");
+    issues.push("interface_doc.usage_refs must be an array of objects when provided");
     return;
   }
   if (value.length > 100) {
-    issues.push("interface_doc.usage_refs 最多填写 100 项");
+    issues.push("interface_doc.usage_refs may contain at most 100 entries");
   }
   value.forEach((usageRef, index) => {
     const path = `interface_doc.usage_refs[${index}]`;
     if (!isObject(usageRef)) {
-      issues.push(`${path} 必须是对象`);
+      issues.push(`${path} must be an object`);
       return;
     }
     requireText(usageRef, "app_name", path, issues);
     for (const key of ["app_id", "location", "note"]) {
       if (usageRef[key] !== undefined && typeof usageRef[key] !== "string") {
-        issues.push(`${path}.${key} 如填写必须是字符串`);
+        issues.push(`${path}.${key} must be a string when provided`);
       }
     }
     for (const key of Object.keys(usageRef)) {
       if (!["app_id", "app_name", "location", "note"].includes(key)) {
-        issues.push(`${path}.${key} 不是支持的字段`);
+        issues.push(`${path}.${key} is not a supported field`);
       }
     }
   });
@@ -785,7 +782,7 @@ function rejectInternalInputTerms(value: unknown, path: string, issues: string[]
       typeof item === "string" &&
       internalInputTermPattern.test(item)
     ) {
-      issues.push(`${itemPath} 面向接口调用方，不得出现 input.query/input.header/input.body/input.cookies 等平台内部结构`);
+      issues.push(`${itemPath} is caller-facing prose and must not contain internal input.query/input.header/input.body/input.cookies structures`);
     }
     if (!documentationValueKeys.has(key)) {
       rejectInternalInputTerms(item, itemPath, issues);
@@ -798,7 +795,7 @@ export function interfaceDocCompletenessIssues(
   operation: "create" | "update",
 ): string[] {
   const issues: string[] = [];
-  if (!isObject(document)) return ["interface_doc 必须是 JSON 对象"];
+  if (!isObject(document)) return ["interface_doc must be a JSON object"];
 
   rejectInternalInputTerms(document, "interface_doc", issues);
   rejectUnsupportedFields(
@@ -809,7 +806,7 @@ export function interfaceDocCompletenessIssues(
   );
 
   if (document.schema_version !== "script-interface-doc.v1") {
-    issues.push("interface_doc.schema_version 必须是 script-interface-doc.v1");
+    issues.push("interface_doc.schema_version must be script-interface-doc.v1");
   }
   requireText(document, "title", "interface_doc", issues);
   requireText(document, "summary", "interface_doc", issues);
@@ -818,16 +815,16 @@ export function interfaceDocCompletenessIssues(
 
   let methods: unknown[] = [];
   if (!isObject(document.endpoint)) {
-    issues.push("interface_doc.endpoint 必须是对象");
+    issues.push("interface_doc.endpoint must be an object");
   } else {
     rejectUnsupportedFields(document.endpoint, ["methods", "path", "description"], "interface_doc.endpoint", issues);
     requireText(document.endpoint, "description", "interface_doc.endpoint", issues);
     if (!Array.isArray(document.endpoint.methods) || document.endpoint.methods.length === 0) {
-      issues.push("interface_doc.endpoint.methods 必须包含 GET 或 POST");
+      issues.push("interface_doc.endpoint.methods must contain GET or POST");
     } else {
       methods = document.endpoint.methods;
       if (methods.some((method) => method !== "GET" && method !== "POST")) {
-        issues.push("interface_doc.endpoint.methods 只能包含 GET 或 POST");
+        issues.push("interface_doc.endpoint.methods may contain only GET or POST");
       }
     }
     if (operation === "update") {
@@ -836,13 +833,13 @@ export function interfaceDocCompletenessIssues(
         !document.endpoint.path.startsWith("/flow/codeblock/") ||
         document.endpoint.path.includes("{script_id}")
       ) {
-        issues.push("更新脚本时 interface_doc.endpoint.path 必须填写实际 /flow/codeblock/{script_id} 路径");
+        issues.push("interface_doc.endpoint.path must be the actual /flow/codeblock/{script_id} path when updating");
       }
     } else if (
       document.endpoint.path !== undefined &&
       (typeof document.endpoint.path !== "string" || !document.endpoint.path.startsWith("/flow/codeblock/"))
     ) {
-      issues.push("interface_doc.endpoint.path 如填写，必须以 /flow/codeblock/ 开头");
+      issues.push("interface_doc.endpoint.path must start with /flow/codeblock/ when provided");
     }
   }
 
@@ -850,16 +847,16 @@ export function interfaceDocCompletenessIssues(
   if (document.request === undefined) {
     // No request fields need documenting.
   } else if (!isObject(document.request)) {
-    issues.push("interface_doc.request 如填写必须是对象");
+    issues.push("interface_doc.request must be an object when provided");
   } else {
     rejectUnsupportedFields(document.request, ["query", "headers", "body"], "interface_doc.request", issues);
     validateParameters(document.request.query, "interface_doc.request.query", issues);
     validateParameters(document.request.headers, "interface_doc.request.headers", issues);
     if (document.request.body !== undefined) {
       if (!hasPost) {
-        issues.push("仅 GET 接口不应填写 interface_doc.request.body");
+        issues.push("GET-only endpoints must not define interface_doc.request.body");
       } else if (!isObject(document.request.body)) {
-        issues.push("interface_doc.request.body 如填写必须是对象");
+        issues.push("interface_doc.request.body must be an object when provided");
       } else {
         rejectUnsupportedFields(
           document.request.body,
@@ -873,31 +870,46 @@ export function interfaceDocCompletenessIssues(
   }
 
   if (!Array.isArray(document.responses) || document.responses.length === 0) {
-    issues.push("interface_doc.responses 必须至少包含一个完整响应");
+    issues.push("interface_doc.responses must contain at least one complete response");
   } else {
     document.responses.forEach((response, index) => {
       const path = `interface_doc.responses[${index}]`;
       if (!isObject(response)) {
-        issues.push(`${path} 必须是对象`);
+        issues.push(`${path} must be an object`);
         return;
       }
       rejectUnsupportedFields(response, ["status", "description", "content_type", "schema", "example"], path, issues);
       if (!Number.isInteger(response.status) || Number(response.status) < 100 || Number(response.status) > 599) {
-        issues.push(`${path}.status 必须是 100-599 的整数`);
+        issues.push(`${path}.status must be an integer from 100 through 599`);
       }
       requireText(response, "description", path, issues);
       validateSchemaAndExample(response, path, issues);
     });
   }
 
-  return [...new Set(issues)];
+  return [...new Set(issues)].sort();
+}
+
+function formatInterfaceDocIssues(issues: string[]): string {
+  const details = issues.map((issue) => {
+    const separator = issue.indexOf(" ");
+    if (separator <= 0) {
+      return { path: "interface_doc", problem: issue, required_fix: "Correct the reported document value." };
+    }
+    return {
+      path: issue.slice(0, separator),
+      problem: issue.slice(separator + 1),
+      required_fix: "Correct this path according to the script-interface-doc.v1 Schema.",
+    };
+  });
+  return JSON.stringify(details, null, 2);
 }
 
 export function assertCompleteInterfaceDoc(document: unknown, operation: "create" | "update"): void {
   const issues = interfaceDocCompletenessIssues(document, operation);
   if (issues.length > 0) {
     throw new Error(
-      `interface_doc 完整性校验失败：\n- ${issues.join("\n- ")}\n修复方式：\n- ${interfaceDocRepairRules.join("\n- ")}\n完整性规则：\n- ${interfaceDocNestedRules.join("\n- ")}`,
+      `interface_doc validation failed. Correct only the listed paths and preserve all other fields:\n${formatInterfaceDocIssues(issues)}`,
     );
   }
 }

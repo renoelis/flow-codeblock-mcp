@@ -107,12 +107,12 @@ describe("interfaceDocCompletenessIssues", () => {
     responseSchema[":{"] = 0;
 
     const issues = interfaceDocCompletenessIssues(document, "create");
-    expect(issues).toContain("interface_doc.responses[0].schema.:{ 不是合法的 JSON Schema 关键字");
+    expect(issues).toContain("interface_doc.responses[0].schema.:{ is not a valid JSON Schema keyword");
     expect(issues).toContain(
-      "interface_doc.responses[0].schema.properties.data.example 缺少 required 字段 distance_m",
+      "interface_doc.responses[0].schema.properties.data.example is missing required field distance_m",
     );
     expect(issues).toContain(
-      "interface_doc.responses[0].schema.properties.data.properties 缺少字段 success 的 Schema 描述",
+      "interface_doc.responses[0].schema.properties.data.properties is missing a Schema for field success",
     );
   });
 
@@ -131,7 +131,7 @@ describe("interfaceDocCompletenessIssues", () => {
 
     const issues = interfaceDocCompletenessIssues(document, "create");
     expect(issues).toContain(
-      "interface_doc.responses[0].schema.properties.success.example 类型必须与 interface_doc.responses[0].schema.properties.success.type=boolean 一致",
+      "interface_doc.responses[0].schema.properties.success.example must match interface_doc.responses[0].schema.properties.success.type=boolean",
     );
   });
 
@@ -172,12 +172,10 @@ describe("interfaceDocCompletenessIssues", () => {
 
     const issues = interfaceDocCompletenessIssues(document, "create");
     const additionalPropertiesIssues = issues.filter((issue) => (
-      issue.includes("properties.detail.additionalProperties 必须使用 properties")
+      issue.includes("properties.detail.additionalProperties")
     ));
     expect(additionalPropertiesIssues).toHaveLength(1);
-    expect(() => assertCompleteInterfaceDoc(document, "create")).toThrow(
-      "错误路径以 .additionalProperties 结尾且父对象键名已知时，应修正父对象的 properties",
-    );
+    expect(() => assertCompleteInterfaceDoc(document, "create")).toThrow("required_fix");
   });
 
   test("allows explicitly opaque upstream JSON objects", () => {
@@ -216,10 +214,10 @@ describe("interfaceDocCompletenessIssues", () => {
 
     const normalized = normalizeInterfaceDocument(document);
     expect(normalized.changes).toEqual([
-      "interface_doc.request.body.properties 已移入 interface_doc.request.body.schema.properties",
-      "interface_doc.request.body.required 已移入 interface_doc.request.body.schema.required",
-      "interface_doc.request.body.example 已从 interface_doc.request.body.schema.example 提升",
-      "interface_doc.responses[0].example 已从 interface_doc.responses[0].schema.example 提升",
+      "interface_doc.request.body.properties moved to interface_doc.request.body.schema.properties",
+      "interface_doc.request.body.required moved to interface_doc.request.body.schema.required",
+      "interface_doc.request.body.example was promoted from interface_doc.request.body.schema.example",
+      "interface_doc.responses[0].example was promoted from interface_doc.responses[0].schema.example",
     ]);
     expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
   });
@@ -237,10 +235,10 @@ describe("interfaceDocCompletenessIssues", () => {
 
     const normalized = normalizeInterfaceDocument(document);
     expect(normalized.changes).toContain(
-      "interface_doc.request.body.schema.properties.required 已移入 interface_doc.request.body.schema.required",
+      "interface_doc.request.body.schema.properties.required moved to interface_doc.request.body.schema.required",
     );
     expect(normalized.changes).toContain(
-      "interface_doc.responses[0].schema.properties.required 已移入 interface_doc.responses[0].schema.required",
+      "interface_doc.responses[0].schema.properties.required moved to interface_doc.responses[0].schema.required",
     );
     expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
   });
@@ -262,9 +260,9 @@ describe("interfaceDocCompletenessIssues", () => {
     const normalizedSchema = normalizedResponse.schema as Record<string, unknown>;
     const normalizedProperties = normalizedSchema.properties as Record<string, unknown>;
     expect(normalized.changes).toEqual(expect.arrayContaining([
-      "interface_doc.responses[0].responses_placeholder 空占位字段已移除",
-      "interface_doc.responses[0].schema.properties.required 已移入 interface_doc.responses[0].schema.required",
-      "interface_doc.responses[0].schema.properties.additionalProperties 已移入 interface_doc.responses[0].schema.additionalProperties",
+      "interface_doc.responses[0].responses_placeholder empty placeholder removed",
+      "interface_doc.responses[0].schema.properties.required moved to interface_doc.responses[0].schema.required",
+      "interface_doc.responses[0].schema.properties.additionalProperties moved to interface_doc.responses[0].schema.additionalProperties",
     ]));
     expect(normalizedSchema.required).toEqual(["success"]);
     expect(normalizedSchema.additionalProperties).toBe(false);
@@ -285,9 +283,9 @@ describe("interfaceDocCompletenessIssues", () => {
 
     const normalized = normalizeInterfaceDocument(document);
     const normalizedDocument = normalized.document as Record<string, unknown>;
-    expect(normalized.changes).toContain("interface_doc.request.responses 已移入 interface_doc.responses");
-    expect(normalized.changes).toContain("interface_doc.request.logic_description 已移入 interface_doc.logic_description");
-    expect(normalized.changes).toContain("interface_doc.ip_whitelist 已移回 flow_preview_script_change.ip_whitelist");
+    expect(normalized.changes).toContain("interface_doc.request.responses moved to interface_doc.responses");
+    expect(normalized.changes).toContain("interface_doc.request.logic_description moved to interface_doc.logic_description");
+    expect(normalized.changes).toContain("interface_doc.ip_whitelist moved back to flow_preview_script_change.ip_whitelist");
     expect(normalizedDocument.responses).toHaveLength(1);
     expect(normalizedDocument.logic_description).toBeDefined();
     expect(normalizedDocument.ip_whitelist).toBeUndefined();
@@ -315,11 +313,11 @@ describe("interfaceDocCompletenessIssues", () => {
     const normalizedRequest = normalizedDocument.request as Record<string, unknown>;
     const normalizedBody = normalizedRequest.body as Record<string, unknown>;
     expect(normalized.changes).toEqual(expect.arrayContaining([
-      "interface_doc.request.description 已移回 flow_preview_script_change.description",
-      "interface_doc.request.body.ip_whitelist 已移回 flow_preview_script_change.ip_whitelist",
-      "interface_doc.request.body.schema.responses 已移入 interface_doc.responses",
-      "interface_doc.request.body.schema.logic_description 已移入 interface_doc.logic_description",
-      "interface_doc.request.body.example 已从误放的 interface_doc.request.body.schema.properties.queryText.example 提升",
+      "interface_doc.request.description moved back to flow_preview_script_change.description",
+      "interface_doc.request.body.ip_whitelist moved back to flow_preview_script_change.ip_whitelist",
+      "interface_doc.request.body.schema.responses moved to interface_doc.responses",
+      "interface_doc.request.body.schema.logic_description moved to interface_doc.logic_description",
+      "interface_doc.request.body.example was promoted from misplaced interface_doc.request.body.schema.properties.queryText.example",
     ]));
     expect(normalized.recovered.description).toBe("数据处理脚本");
     expect(normalized.recovered.ip_whitelist).toEqual(["203.0.113.20"]);
@@ -342,9 +340,9 @@ describe("interfaceDocCompletenessIssues", () => {
 
     const normalized = normalizeInterfaceDocument(document);
     expect(normalized.changes).toEqual(expect.arrayContaining([
-      "interface_doc.request.body.responses 已移入 interface_doc.responses",
-      "interface_doc.request.body.logic_description 已移入 interface_doc.logic_description",
-      "interface_doc.request.body.example 已从 interface_doc.request.body.schema.properties.example 提升",
+      "interface_doc.request.body.responses moved to interface_doc.responses",
+      "interface_doc.request.body.logic_description moved to interface_doc.logic_description",
+      "interface_doc.request.body.example was promoted from interface_doc.request.body.schema.properties.example",
     ]));
     expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
   });
@@ -356,7 +354,7 @@ describe("interfaceDocCompletenessIssues", () => {
 
     document.request.body.schema.required.push("optionalNote");
     const issues = interfaceDocCompletenessIssues(document, "create");
-    expect(issues).toContain("interface_doc.request.body.example 缺少 required 字段 optionalNote");
+    expect(issues).toContain("interface_doc.request.body.example is missing required field optionalNote");
   });
 
   test("removes string usage notes and copies examples between snake and camel aliases", () => {
@@ -377,10 +375,10 @@ describe("interfaceDocCompletenessIssues", () => {
 
     const normalized = normalizeInterfaceDocument(document);
     expect(normalized.changes).toContain(
-      "interface_doc.usage_refs 已移除 1 个非对象条目；普通说明应写入 logic_description",
+      "Removed 1 non-object entries from interface_doc.usage_refs; ordinary prose belongs in logic_description",
     );
     expect(normalized.changes).toContain(
-      "interface_doc.request.body.schema.properties.storeInfo.example 已从别名 interface_doc.request.body.schema.properties.store_info.example 补全",
+      "interface_doc.request.body.schema.properties.storeInfo.example was filled from alias interface_doc.request.body.schema.properties.store_info.example",
     );
     expect((normalized.document as Record<string, unknown>).usage_refs).toBeUndefined();
     expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
@@ -390,8 +388,8 @@ describe("interfaceDocCompletenessIssues", () => {
     const document = completePostDocument();
     (document as Record<string, unknown>).usage_refs = [{ note: "缺少应用名称", unsupported: true }];
     const issues = interfaceDocCompletenessIssues(document, "create");
-    expect(issues).toContain("interface_doc.usage_refs[0].app_name 必须是至少 1 个字符的非空字符串");
-    expect(issues).toContain("interface_doc.usage_refs[0].unsupported 不是支持的字段");
+    expect(issues).toContain("interface_doc.usage_refs[0].app_name must be a non-empty string with at least 1 character(s)");
+    expect(issues).toContain("interface_doc.usage_refs[0].unsupported is not a supported field");
   });
 
   test("normalizes nested examples independently of property order", () => {
@@ -447,7 +445,7 @@ describe("interfaceDocCompletenessIssues", () => {
 
     const normalized = normalizeInterfaceDocument(document);
     expect(normalized.changes).toContain(
-      "interface_doc.request.example 已移入 interface_doc.request.body.example",
+      "interface_doc.request.example moved to interface_doc.request.body.example",
     );
     expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
 
@@ -455,8 +453,8 @@ describe("interfaceDocCompletenessIssues", () => {
     (invalidDocument.endpoint as Record<string, unknown>).unsupported = true;
     (invalidDocument.request as Record<string, unknown>).unsupported = true;
     const issues = interfaceDocCompletenessIssues(invalidDocument, "create");
-    expect(issues).toContain("interface_doc.endpoint.unsupported 不是支持的字段");
-    expect(issues).toContain("interface_doc.request.unsupported 不是支持的字段");
+    expect(issues).toContain("interface_doc.endpoint.unsupported is not a supported field");
+    expect(issues).toContain("interface_doc.request.unsupported is not a supported field");
   });
 
   test("rewrites internal input terms only in documentation prose", () => {
@@ -472,15 +470,14 @@ describe("interfaceDocCompletenessIssues", () => {
     const normalizedDocument = normalized.document as typeof document;
     const trace = normalizedDocument.responses[0].schema.properties.trace as Record<string, unknown>;
     expect(normalized.changes).toEqual(expect.arrayContaining([
-      "interface_doc.logic_description 已将平台内部输入术语转换为调用方 HTTP 术语",
-      "interface_doc.responses[0].schema.properties.trace.description 已将平台内部输入术语转换为调用方 HTTP 术语",
+      "interface_doc.logic_description converted an internal input term to caller-facing HTTP terminology",
+      "interface_doc.responses[0].schema.properties.trace.description converted an internal input term to caller-facing HTTP terminology",
     ]));
-    expect(normalizedDocument.logic_description).toContain("脚本读取 HTTP 请求体");
-    expect(normalizedDocument.logic_description).toContain("HTTP 请求体");
-    expect(normalizedDocument.logic_description).toContain("URL 查询参数");
-    expect(normalizedDocument.logic_description).toContain("HTTP 请求头");
+    expect(normalizedDocument.logic_description).toContain("HTTP body");
+    expect(normalizedDocument.logic_description).toContain("URL query parameters");
+    expect(normalizedDocument.logic_description).toContain("HTTP headers");
     expect(normalizedDocument.logic_description).toContain("Cookie");
-    expect(trace.description).toBe("根据 HTTP 请求头生成的业务跟踪值");
+    expect(trace.description).toBe("根据 HTTP headers生成的业务跟踪值");
     expect(trace.example).toBe("input.body");
     expect(interfaceDocCompletenessIssues(normalized.document, "create")).toEqual([]);
   });
@@ -500,6 +497,6 @@ describe("interfaceDocPatch", () => {
     expect(() => assertInterfaceDocPatch(patch)).not.toThrow();
     expect(() => assertInterfaceDocPatch([
       { op: "add", path: "/summary", value: "x", extra: true },
-    ])).toThrow("interface_doc_patch 格式无效");
+    ])).toThrow("Invalid interface_doc_patch format");
   });
 });

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://flow-codeblock.local/schemas/script-interface-doc.v1.json",
   "title": "Flow Script Interface Document v1 - MCP Complete Contract",
-  "$comment": "MCP 创建和代码更新使用此完整契约。没有实际参数时可省略 request；有参数或 POST 请求体时按条件填写。",
+  "$comment": "MCP create and code updates use this complete contract. Omit request when there are no actual parameters; include it when parameters or a POST body must be documented.",
   "type": "object",
   "required": ["schema_version", "title", "summary", "endpoint", "responses", "logic_description"],
   "additionalProperties": false,
@@ -16,7 +16,7 @@
       "additionalProperties": false,
       "properties": {
         "methods": {"type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true, "items": {"enum": ["GET", "POST"]}},
-        "path": {"type": "string", "pattern": "^/flow/codeblock/", "description": "Web 页面录入时可省略；MCP 创建时可省略，更新时填写实际脚本路径。最终调用地址由 MCP 使用 FLOW_CODEBLOCK_BASE_URL 加 /flow/codeblock/{{脚本ID}} 生成，并通过发布结果 data.script_url 返回。"},
+        "path": {"type": "string", "pattern": "^/flow/codeblock/", "description": "Optional in the web form and on MCP create; updates must use the actual script path. MCP builds the final URL from FLOW_CODEBLOCK_BASE_URL plus /flow/codeblock/{{script_id}} and returns it as data.script_url."},
         "description": {"type": "string", "minLength": 1, "maxLength": 4000}
       }
     },
@@ -26,7 +26,7 @@
       "properties": {
         "query": {"$ref": "#/$defs/parameters"},
         "headers": {"$ref": "#/$defs/parameters"},
-        "body": {"$ref": "#/$defs/body", "description": "实际需要描述 POST 请求体时填写；没有请求参数时 request 可省略。"}
+        "body": {"$ref": "#/$defs/body", "description": "Include when the actual POST body must be documented; omit request when there are no request parameters."}
       }
     },
     "responses": {"type": "array", "minItems": 1, "maxItems": 50, "items": {"$ref": "#/$defs/response"}},
@@ -60,7 +60,7 @@
       "properties": {
         "content_type": {"const": "application/json"},
         "schema": {"$ref": "#/$defs/schema_root"},
-        "example": {"description": "必须填写与 schema 一致的调用方请求体值，并覆盖 schema.required 字段；运行时可选字段可以省略。"}
+        "example": {"description": "Required caller request-body value matching schema and covering schema.required fields; runtime-optional fields may be omitted."}
       }
     },
     "response": {
@@ -72,7 +72,7 @@
         "description": {"type": "string", "minLength": 1, "maxLength": 4000},
         "content_type": {"const": "application/json"},
         "schema": {"$ref": "#/$defs/schema_root"},
-        "example": {"description": "必须填写与 schema 一致的响应值，并覆盖 schema.required 字段；运行时可选字段可以省略。"}
+        "example": {"description": "Required response value matching schema and covering schema.required fields; runtime-optional fields may be omitted."}
       }
     },
     "schema_root": {
@@ -82,9 +82,9 @@
         "type": {"type": "string", "minLength": 1},
         "description": {"type": "string", "minLength": 1},
         "example": {},
-        "properties": {"type": "object", "description": "代码或 example 中键名已知时必须逐项填写，每个值为完整 schema_node。", "additionalProperties": {"$ref": "#/$defs/schema_node"}},
+        "properties": {"type": "object", "description": "When keys are known from code or an example, declare each key with a complete schema_node.", "additionalProperties": {"$ref": "#/$defs/schema_node"}},
         "items": {"$ref": "#/$defs/schema_node"},
-        "additionalProperties": {"description": "对象 Schema 仅用于键名运行时才确定且所有值结构相同的动态字典；true 仅用于脚本原样透传且结构确实未知的上游 JSON 对象；不得用空 object Schema 兜底任意 JSON 值。", "anyOf": [{"$ref": "#/$defs/schema_node"}, {"type": "boolean"}]},
+        "additionalProperties": {"description": "Use object Schema only for homogeneous dictionaries whose keys are known at runtime; true is only for opaque upstream JSON passed through unchanged. Do not use an empty object Schema as an arbitrary-value fallback.", "anyOf": [{"$ref": "#/$defs/schema_node"}, {"type": "boolean"}]},
         "required": {"type": "array", "items": {"type": "string"}}
       },
       "additionalProperties": true
@@ -96,9 +96,9 @@
         "type": {"type": "string", "minLength": 1},
         "description": {"type": "string", "minLength": 1},
         "example": {},
-        "properties": {"type": "object", "description": "代码或 example 中键名已知时必须逐项填写，每个值为完整 schema_node。", "additionalProperties": {"$ref": "#/$defs/schema_node"}},
+        "properties": {"type": "object", "description": "When keys are known from code or an example, declare each key with a complete schema_node.", "additionalProperties": {"$ref": "#/$defs/schema_node"}},
         "items": {"$ref": "#/$defs/schema_node"},
-        "additionalProperties": {"description": "对象 Schema 仅用于键名运行时才确定且所有值结构相同的动态字典；true 仅用于脚本原样透传且结构确实未知的上游 JSON 对象；不得用空 object Schema 兜底任意 JSON 值。", "anyOf": [{"$ref": "#/$defs/schema_node"}, {"type": "boolean"}]},
+        "additionalProperties": {"description": "Use object Schema only for homogeneous dictionaries whose keys are known at runtime; true is only for opaque upstream JSON passed through unchanged. Do not use an empty object Schema as an arbitrary-value fallback.", "anyOf": [{"$ref": "#/$defs/schema_node"}, {"type": "boolean"}]},
         "required": {"type": "array", "items": {"type": "string"}}
       },
       "additionalProperties": true

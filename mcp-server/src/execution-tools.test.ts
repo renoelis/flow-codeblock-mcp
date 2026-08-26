@@ -107,7 +107,7 @@ describe("execution tool call URLs", () => {
     expect(response.isError).toBe(true);
     const content = response.content.find((item) => item.type === "text");
     if (!content || content.type !== "text") throw new Error("execution error did not return text");
-    expect(content.text).toContain("第三方 API 密钥必须由外部调用方");
+    expect(content.text).toContain("third-party API keys must be supplied by the caller");
     expect(apiRequests).toHaveLength(0);
   });
 });
