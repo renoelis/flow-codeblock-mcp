@@ -60,6 +60,7 @@ Common `error.details` fields are `field`/`reason`, `retryAfter` for rate limiti
 
 - `POST /flow/codeblock` returns `{ success, result, timing, timestamp, request_id }`; `timing.executionTime` and `timing.totalTime` are milliseconds.
 - A failed code execution includes `error.type`, `error.message`, and optionally `error.stack`.
+- Errors that can be reliably mapped to user source use one-based `error.details.line`, `column`, and `lineContent`, including pre-validation syntax failures, dangerous-code policy violations, and Bun user-code runtime failures. The API does not fabricate a location when the source frame cannot be verified. Security policy violations on code execution remain `SecurityError`; script-save validation keeps its existing `ValidationError` type.
 - `GET|POST /flow/codeblock/{scriptId}` returns the script result directly on success and an error structure with `timing` on failure.
 - The server generates `X-Request-ID` for every request and ignores a caller-supplied value. CORS success responses expose it through `Access-Control-Expose-Headers`.
 - Neither execution endpoint provides business idempotency. Repeated or concurrent calls independently execute, consume quota, and write statistics after validation.
@@ -82,6 +83,8 @@ Common `error.details` fields are `field`/`reason`, `retryAfter` for rate limiti
 | QuotaExceededError | Quota exhausted | 429 |
 | ExecutionTimeoutError | Execution timed out | 400 |
 | ExecutionError | Code execution failed | 400 |
+| SyntaxError | User code cannot be parsed before execution | 422 |
+| SecurityError | User code violates an execution security or output protocol policy | 422 |
 | ScriptError | Aggregated script error | 400/404/409/429 |
 | DuplicateScriptError | Duplicate script code | 409 |
 | ScriptQuotaExceededError | Script count quota exceeded | 429 |
