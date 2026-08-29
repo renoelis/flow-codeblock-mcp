@@ -62,6 +62,7 @@ Common `error.details` fields are `field`/`reason`, `retryAfter` for rate limiti
 - A failed code execution includes `error.type`, `error.message`, and optionally `error.stack`.
 - Errors that can be reliably mapped to user source use one-based `error.details.line`, `column`, and `lineContent`, including pre-validation syntax failures, dangerous-code policy violations, and Bun user-code runtime failures. The API does not fabricate a location when the source frame cannot be verified. Security policy violations on code execution remain `SecurityError`; script-save validation keeps its existing `ValidationError` type.
 - `GET|POST /flow/codeblock/{scriptId}` returns the script result directly on success and an error structure with `timing` on failure.
+- If the client closes either execution HTTP request before it completes (for example, browser `AbortController`, Postman Cancel, or an interrupted MCP HTTP call), the server cancels that execution and terminates its Bun Worker. The server still writes the failed execution record and refunds the execution quota; no cancellation response is sent after the client disconnects.
 - The server generates `X-Request-ID` for every request and ignores a caller-supplied value. CORS success responses expose it through `Access-Control-Expose-Headers`.
 - Neither execution endpoint provides business idempotency. Repeated or concurrent calls independently execute, consume quota, and write statistics after validation.
 - Code execution does not read `Idempotency-Key`; that header applies only to endpoints that explicitly support it.
@@ -82,6 +83,7 @@ Common `error.details` fields are `field`/`reason`, `retryAfter` for rate limiti
 | TokenInactiveError | Token disabled | 403/410 |
 | QuotaExceededError | Quota exhausted | 429 |
 | ExecutionTimeoutError | Execution timed out | 400 |
+| CancelledError | Client interrupted the execution HTTP request; the server cancels the execution and refunds its execution quota | not returned after disconnect |
 | ExecutionError | Code execution failed | 400 |
 | SyntaxError | User code cannot be parsed before execution | 422 |
 | SecurityError | User code violates an execution security or output protocol policy | 422 |
