@@ -80,7 +80,7 @@ The MCP compatibility layer may infer a missing operation from `script_id` and i
 
 Only script interfaces interpret `flow_redirect_url` and `flow_redirect_code`; non-script results treat them as ordinary data. Redirect URLs must be a valid single-slash relative path or an `http`/`https` URL. Codes are limited to 301, 302, 303, 307, and 308.
 
-- Non-script delivery includes JavaScript, caller-facing invocation instructions, parameters/examples, logic, success/error examples, and the complete `execution_url`.
+- Non-script delivery, including every initial generation, fix, or later update, includes the complete latest JavaScript source produced in the current turn, caller-facing invocation instructions, parameters/examples, logic, success/error examples, and the complete `execution_url`. Never return only a patch, changed fragment, explanation, or execution result.
 - Script delivery includes caller-facing invocation instructions, parameters/examples, logic, success/error examples, and the published `script_url`; do not echo code or raw `interface_doc` unless requested.
 
 MCP has no script deletion tool. Do not substitute another tool for deletion; direct the user to the Flow Codeblock web UI or REST API. Deletion requires an unlocked script with released ownership. Ownership lock, unlock, release, and transfer use their dedicated verification-code flows; never guess, store, or reuse codes.

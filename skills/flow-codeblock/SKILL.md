@@ -36,7 +36,7 @@ The authoritative code-generation rules are in [AGENT_PROMPT.md](references/AGEN
 
 ## Delivery
 
-- `non_script`: return JavaScript, caller-facing invocation instructions, parameters/examples, logic, success/error examples, and the complete `execution_url`.
+- `non_script`: after every initial generation, fix, or later update, return the complete latest JavaScript source produced in the current turn, caller-facing invocation instructions, parameters/examples, logic, success/error examples, and the complete `execution_url`; never return only a patch, changed fragment, explanation, or execution result.
 - `script`: return caller-facing invocation instructions, parameters/examples, logic, success/error examples, and the published `script_url`; omit internal code and raw interface JSON unless requested.
 
 ## References

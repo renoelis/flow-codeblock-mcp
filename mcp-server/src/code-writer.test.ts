@@ -36,6 +36,13 @@ describe("codeWriterContext", () => {
     expect(rules.content).toContain("Keep successful and error shapes in separate responses");
   });
 
+  test("requires complete latest source after every non-script update", () => {
+    const context = codeWriterContext("non_script", "更新现有代码");
+    const rules = objectField(context, "authoritative_rules");
+    expect(rules.content).toContain("complete latest JavaScript source produced in the current turn");
+    expect(rules.content).toContain("Never return only a patch, changed fragment, explanation, or execution result");
+  });
+
   test("returns AGENT_PROMPT.md verbatim as the authoritative rule source", async () => {
     const expectedPrompt = await Bun.file(new URL("AGENT_PROMPT.md", referencesDirectory)).text();
     const context = codeWriterContext("non_script", "处理输入");
