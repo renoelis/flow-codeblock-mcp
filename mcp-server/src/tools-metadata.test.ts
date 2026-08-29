@@ -318,7 +318,7 @@ describe("MCP tool metadata", () => {
     expect(scriptPayload).not.toHaveProperty("script_url");
   });
 
-  test("returns both authoritative files unchanged through the MCP transport", async () => {
+  test("returns all requested authoritative files unchanged through the MCP transport", async () => {
     const response = await client.callTool({
       name: "flow_write_code",
       arguments: {
@@ -331,14 +331,19 @@ describe("MCP tool metadata", () => {
     if (!textContent || textContent.type !== "text") throw new Error("flow_write_code did not return text");
     const payload = JSON.parse(textContent.text) as Record<string, unknown>;
     const rules = payload.authoritative_rules as Record<string, unknown>;
+    const patterns = payload.dangerous_patterns as Record<string, unknown>;
     const schema = payload.interface_document_schema as Record<string, unknown>;
     const referencesDirectory = new URL("../../skills/flow-codeblock/references/", import.meta.url);
     const expectedPrompt = await Bun.file(new URL("AGENT_PROMPT.md", referencesDirectory)).text();
+    const expectedPatterns = JSON.parse(
+      await Bun.file(new URL("dangerous_patterns.json", referencesDirectory)).text(),
+    );
     const expectedSchema = JSON.parse(
       await Bun.file(new URL("script-interface-doc.schema.json", referencesDirectory)).text(),
     );
 
     expect(rules.content).toBe(expectedPrompt);
+    expect(patterns.value).toEqual(expectedPatterns);
     expect(schema.value).toEqual(expectedSchema);
   });
 });

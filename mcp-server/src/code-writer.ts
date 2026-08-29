@@ -1,4 +1,5 @@
 const agentPromptSource = "skills/flow-codeblock/references/AGENT_PROMPT.md";
+const dangerousPatternsSource = "skills/flow-codeblock/references/dangerous_patterns.json";
 const interfaceDocSchemaSource = "skills/flow-codeblock/references/script-interface-doc.schema.json";
 const interfaceDocPatchSchemaSource = "skills/flow-codeblock/references/script-interface-doc.patch.schema.json";
 const referencesDirectory = new URL("../../skills/flow-codeblock/references/", import.meta.url);
@@ -12,6 +13,15 @@ async function readRequiredReference(fileName: string): Promise<string> {
 }
 
 export const agentPrompt = await readRequiredReference("AGENT_PROMPT.md");
+
+const dangerousPatternsText = await readRequiredReference("dangerous_patterns.json");
+export const dangerousPatterns: unknown = (() => {
+  try {
+    return JSON.parse(dangerousPatternsText);
+  } catch (error) {
+    throw new Error(`Flow Codeblock dangerous-pattern rules are invalid JSON: ${String(error)}`);
+  }
+})();
 
 const interfaceDocSchemaText = await readRequiredReference("script-interface-doc.schema.json");
 export const interfaceDocSchema: unknown = (() => {
@@ -37,14 +47,18 @@ export function codeWriterContext(
   includeFullSchema = false,
 ): Record<string, unknown> {
   const common = {
-    contract_version: "flow-code-writer.v3",
+    contract_version: "flow-code-writer.v4",
     mode,
     requirement,
     mutates_or_executes: false,
-    instruction: "Follow authoritative_rules.content in full; it is loaded directly from the authoritative rule file, not a summary.",
+    instruction: "Follow authoritative_rules.content and dangerous_patterns.value in full; both are loaded directly from the authoritative rule files, not summaries.",
     authoritative_rules: {
       source: agentPromptSource,
       content: agentPrompt,
+    },
+    dangerous_patterns: {
+      source: dangerousPatternsSource,
+      value: dangerousPatterns,
     },
   };
 

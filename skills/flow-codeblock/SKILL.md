@@ -32,7 +32,7 @@ For any code-writing or interface implementation request, call `flow_write_code`
 4. Show the successful preview and wait for explicit confirmation. Only then call `flow_apply_script_change` with the same `preview_id` and `confirm=true`.
 5. After a successful create, call `flow_execute_script` only when execution was requested. Pass POST business JSON directly as `body`; do not wrap it as `input` or `input.body`.
 
-The authoritative code-generation rules are in [AGENT_PROMPT.md](references/AGENT_PROMPT.md). The complete document contract is in [script-interface-doc.schema.json](references/script-interface-doc.schema.json), and the incremental contract is in [script-interface-doc.patch.schema.json](references/script-interface-doc.patch.schema.json). The MCP validator performs the same recursive checks before calling the remote API, so correct all reported paths in one pass.
+The authoritative code-generation rules are in [AGENT_PROMPT.md](references/AGENT_PROMPT.md). `flow_write_code` also returns the complete [dangerous_patterns.json](references/dangerous_patterns.json) content so generated code can avoid every forbidden identifier and member. The complete document contract is in [script-interface-doc.schema.json](references/script-interface-doc.schema.json), and the incremental contract is in [script-interface-doc.patch.schema.json](references/script-interface-doc.patch.schema.json). The MCP validator performs the same recursive checks before calling the remote API, so correct all reported paths in one pass.
 
 ## Delivery
 

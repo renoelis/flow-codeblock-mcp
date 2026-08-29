@@ -41,9 +41,21 @@ describe("codeWriterContext", () => {
     const context = codeWriterContext("non_script", "处理输入");
     const authoritativeRules = objectField(context, "authoritative_rules");
 
-    expect(context.contract_version).toBe("flow-code-writer.v3");
+    expect(context.contract_version).toBe("flow-code-writer.v4");
     expect(authoritativeRules.source).toBe("skills/flow-codeblock/references/AGENT_PROMPT.md");
     expect(authoritativeRules.content).toBe(expectedPrompt);
+  });
+
+  test("returns the dangerous-pattern rules needed to avoid safe-looking forbidden members", async () => {
+    const expectedPatterns = JSON.parse(
+      await Bun.file(new URL("dangerous_patterns.json", referencesDirectory)).text(),
+    );
+    const context = codeWriterContext("non_script", "解析日期");
+    const patterns = objectField(context, "dangerous_patterns");
+
+    expect(patterns.source).toBe("skills/flow-codeblock/references/dangerous_patterns.json");
+    expect(patterns.value).toEqual(expectedPatterns);
+    expect(objectField(patterns.value as Record<string, unknown>, "identifiers").exec).toBe("exec detected");
   });
 
   test("returns the parsed authoritative interface schema only when requested", async () => {
