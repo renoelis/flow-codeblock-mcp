@@ -186,6 +186,7 @@ describe("MCP tool metadata", () => {
     expect(byName.get("flow_execute_code")?.description).toContain("execution_url");
     expect(byName.get("flow_execute_code")?.description).toContain("never process.env");
     expect(byName.get("flow_preview_script_change")?.description).toContain("interface_doc_patch");
+    expect(byName.get("flow_preview_script_change")?.description).toContain("code-only updates may omit both document fields");
     expect(byName.get("flow_preview_script_change")?.description).toContain("preview_ready=true");
     expect(byName.get("flow_preview_script_change")?.description).toContain("requires_repreview=false");
     expect(byName.get("flow_preview_script_change")?.description).toContain("deterministic normalization and validation");
@@ -194,6 +195,8 @@ describe("MCP tool metadata", () => {
       .toContain("MCP infers create without script_id and update with script_id");
     expect(byName.get("flow_preview_script_change")?.inputSchema.properties?.ip_whitelist?.description)
       .toContain("Omit for documentation-only updates");
+    expect(byName.get("flow_preview_script_change")?.inputSchema.properties?.code?.description)
+      .toContain("code may be submitted without interface_doc or interface_doc_patch");
     expect(byName.get("flow_apply_script_change")?.description).toContain("user explicitly confirmed publication");
     expect(byName.get("flow_request_script_owner_challenge")?.inputSchema.properties?.action)
       .toMatchObject({ enum: ["lock", "unlock", "release"] });

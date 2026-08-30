@@ -7,7 +7,7 @@ Local stdio MCP server and Codex Skill for Flow Codeblock. The MCP server calls 
 Requires Bun 1.4.0 or newer:
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.3.5
+bunx --bun flow-codeblock-mcp@0.3.6
 ```
 
 Required environment:
@@ -32,7 +32,7 @@ When `FLOW_CODEBLOCK_OWNER_EMAIL` is configured, current-owner email arguments f
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.3.5"],
+      "args": ["--bun", "flow-codeblock-mcp@0.3.6"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "https://qingcode.oalite.com",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>",
@@ -50,7 +50,7 @@ The npm package includes the MCP runtime, the `flow-codeblock` Skill, `AGENT_PRO
 
 - Call `flow_write_code` before writing code. Non-script code reads `input.<field>`; script code reads `input.query/header/body/cookies` internally.
 - After every non-script generation, fix, or update, return the complete latest JavaScript source; never return only a patch, fragment, explanation, or execution result.
-- Script changes require `flow_preview_script_change`, display of the successful preview, explicit user confirmation, and then `flow_apply_script_change`. A successful preview already contains all normalizations and does not need a second preview.
+- Script changes require `flow_preview_script_change`, display of the successful preview, explicit user confirmation, and then `flow_apply_script_change`. Code-only updates may omit `interface_doc` and `interface_doc_patch`, preserving the current interface document. A successful preview already contains all normalizations and does not need a second preview.
 - Use `flow_get_script` with only `script_id` for the current version. Use history tools only for an explicitly requested version. The MCP server decodes valid `code_base64` to UTF-8 `code`.
 - POST script execution receives the caller's business JSON directly as `body`; do not wrap it in `input` or `input.body`.
 - Third-party API keys are business inputs supplied through the documented body, query, or business headers. User code must not read `process.env`; `FLOW_CODEBLOCK_TOKEN` is platform authentication only.

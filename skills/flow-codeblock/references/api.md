@@ -179,7 +179,7 @@ For `GET /flow/tokens`, queries using only `ws_id` or only `email` mask `access_
 ### Token-authenticated script management
 
 - `POST /flow/scripts`: create with `code_base64`, optional `description`, `ip_whitelist`, and a complete `interface_doc`; creation stores code and documentation as version 1 and does not accept patches.
-- `PUT /flow/scripts/{scriptId}`: update with optional `expected_version`, code, description, IP allowlist, complete `interface_doc`, mutually exclusive `interface_doc_patch`, or `rollback_to_version`. Code and rollback are mutually exclusive. Identical code changes only metadata and return `code_changed=false`; locked scripts return 423.
+- `PUT /flow/scripts/{scriptId}`: update with optional `expected_version`, code, description, IP allowlist, complete `interface_doc`, mutually exclusive `interface_doc_patch`, or `rollback_to_version`. Code-only updates preserve the current interface document. Code and rollback are mutually exclusive. Identical code changes only metadata and return `code_changed=false`; locked scripts return 423.
 - `POST /flow/scripts/validate`: authenticate, normalize, and validate code/document inputs without database writes or execution quota consumption. It accepts complete `interface_doc` or `interface_doc_patch`, not both.
 - `DELETE /flow/scripts/{scriptId}`: allowed only when unlocked and ownership is released; an unlocked but still-owned script returns `ScriptOwnershipClaimedError`.
 - `POST /flow/scripts/{scriptId}/owner-challenge`: request a `lock`, `unlock`, or `release` verification code. First lock can claim an unowned script; existing ownership requires an email match.
