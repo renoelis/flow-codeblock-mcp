@@ -422,7 +422,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.3.6" },
+  { name: "flow-codeblock", version: "0.3.7" },
   { instructions: serverInstructions },
 );
 
@@ -763,7 +763,7 @@ const changeSchema = {
   ),
   interface_doc: interfaceDocToolInputSchema.optional(),
   interface_doc_patch: interfaceDocPatchSchema.optional().describe(
-    "RFC 6902 JSON Patch operations for update only. Read the current interface document first and interpret paths against its canonical array indexes. Mutually exclusive with interface_doc and forbidden for create.",
+    "RFC 6902 JSON Patch operations for update only. Read the current interface document first and interpret paths against its canonical array indexes. Values under /usage_refs must follow the interface document contract; app_id is a string, not a number (use \"98701\"). Mutually exclusive with interface_doc and forbidden for create.",
   ),
   responses: z.unknown().optional().describe(
     "Compatibility recovery only: responses misplaced at the tool-argument level are moved to interface_doc.responses. New calls must put them directly in interface_doc.",
