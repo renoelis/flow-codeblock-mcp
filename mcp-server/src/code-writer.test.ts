@@ -72,6 +72,18 @@ describe("codeWriterContext", () => {
     expect(objectField(patterns.value as Record<string, unknown>, "identifiers").exec).toBe("exec detected");
   });
 
+  test("returns the packaged default module blacklist", async () => {
+    const expectedBlacklist = JSON.parse(
+      await Bun.file(new URL("module_blacklist.json", referencesDirectory)).text(),
+    );
+    const context = codeWriterContext("non_script", "调用 Bun API");
+    const blacklist = objectField(context, "module_blacklist");
+
+    expect(blacklist.source).toBe("skills/flow-codeblock/references/module_blacklist.json");
+    expect(blacklist.value).toEqual(expectedBlacklist);
+    expect(blacklist.loading).toContain("running service remains authoritative");
+  });
+
   test("returns the parsed authoritative interface schema only when requested", async () => {
     const expectedSchema = JSON.parse(
       await Bun.file(new URL("script-interface-doc.schema.json", referencesDirectory)).text(),

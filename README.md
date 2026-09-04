@@ -7,7 +7,7 @@ Local stdio MCP server and Codex Skill for Flow Codeblock. The MCP server calls 
 The deployed Flow Codeblock service runs Bun 1.4.1. The local MCP server requires Bun 1.4.0 or newer:
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.3.10
+bunx --bun flow-codeblock-mcp@0.3.11
 ```
 
 Required environment:
@@ -32,7 +32,7 @@ When `FLOW_CODEBLOCK_OWNER_EMAIL` is configured, current-owner email arguments f
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.3.10"],
+      "args": ["--bun", "flow-codeblock-mcp@0.3.11"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "https://qingcode.oalite.com",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>",
@@ -44,7 +44,7 @@ When `FLOW_CODEBLOCK_OWNER_EMAIL` is configured, current-owner email arguments f
 }
 ```
 
-The npm package includes the MCP runtime, the `flow-codeblock` Skill, `AGENT_PROMPT.md`, module and dangerous-pattern rules, and interface-document Schemas. Ordinary MCP clients do not install the Codex Skill automatically; `flow_write_code` reads the authoritative authoring and dangerous-pattern rules from the package at runtime and returns both.
+The npm package includes the MCP runtime, the `flow-codeblock` Skill, `AGENT_PROMPT.md`, the default module blacklist snapshot, dangerous-pattern rules, and interface-document Schemas. The default snapshot is guidance; the running Flow Codeblock service remains authoritative after startup configuration changes. Ordinary MCP clients do not install the Codex Skill automatically; `flow_write_code` reads the packaged authoring, module-blacklist, and dangerous-pattern rules at runtime and returns them.
 
 ## Calling rules
 

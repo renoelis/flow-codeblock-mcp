@@ -344,12 +344,18 @@ describe("MCP tool metadata", () => {
     const expectedPatterns = JSON.parse(
       await Bun.file(new URL("dangerous_patterns.json", referencesDirectory)).text(),
     );
+    const expectedBlacklist = JSON.parse(
+      await Bun.file(new URL("module_blacklist.json", referencesDirectory)).text(),
+    );
     const expectedSchema = JSON.parse(
       await Bun.file(new URL("script-interface-doc.schema.json", referencesDirectory)).text(),
     );
 
     expect(rules.content).toBe(expectedPrompt);
     expect(patterns.value).toEqual(expectedPatterns);
+    const blacklist = payload.module_blacklist as Record<string, unknown>;
+    expect(blacklist.source).toBe("skills/flow-codeblock/references/module_blacklist.json");
+    expect(blacklist.value).toEqual(expectedBlacklist);
     expect(schema.value).toEqual(expectedSchema);
   });
 });

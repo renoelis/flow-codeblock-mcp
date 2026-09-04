@@ -1,6 +1,6 @@
 {
   "name": "flow-codeblock",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "description": "Manage, validate, publish, and execute Flow Codeblock scripts through a local stdio MCP server.",
   "license": "MIT",
   "repository": "https://github.com/renoelis/flow-codeblock-mcp",
