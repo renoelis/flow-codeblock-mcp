@@ -71,8 +71,10 @@ The MCP compatibility layer may infer a missing operation from `script_id` and i
 ## Modules and safety
 
 - Prefer native `URL`, `URLSearchParams`, Promises, and `fetch`.
-- Use only modules and versions listed in `modules.json`, with the allowed literal `require` forms.
+- npm packages remain limited to the versions and names listed in `modules.json`, with the allowed literal `require` forms. Node built-ins (bare names and `node:*`, such as `fs` and `node:fs`) and Bun `bun:*` modules are available unless the service startup blacklist rejects them.
+- The service loads `config/module_blacklist.json` at startup. A blacklist entry `fs` rejects both `fs` and `node:fs`; `node:fs` rejects only `node:fs`; `bun` rejects the complete `Bun` global and every `bun:*` module; `bun:sqlite` rejects only that module. Removing `bun` injects the complete native `Bun` object as the `Bun` function parameter. `globalThis` remains the isolated execution object.
 - Do not use dynamic `import`, ESM `import/export`, indirect `require`, `module`, `exports`, browser APIs, or any dangerous pattern listed in `dangerous_patterns.json`.
+- The module blacklist is a deployment capability switch, not a sandbox; removing `bun` authorizes Bun file, process, database, and server APIs. The separate dangerous-pattern policy still applies.
 - Treat every key under `dangerous_patterns.json` `identifiers` as forbidden even when it is a safe-looking property or method name. For example, use `String(value).match(pattern)` instead of `pattern.exec(String(value))`. Before returning code, check the complete source against every listed identifier and member.
 - Do not use `eval`, `Function`, `Proxy`, `__proto__`, child-process APIs, timers, polling, background retries, unbounded loops, or unsettled Promises.
 - Default limits are 65,535 code bytes, 2 MiB input, 10 MiB result, 100 ms minimum timeout, and 15,000 ms maximum timeout; deployed configuration wins.
