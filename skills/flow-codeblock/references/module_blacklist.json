@@ -5,6 +5,7 @@
     "cluster",
     "dgram",
     "dns",
+    "fs",
     "http",
     "http2",
     "https",
