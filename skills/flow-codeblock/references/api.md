@@ -58,10 +58,11 @@ Common `error.details` fields are `field`/`reason`, `retryAfter` for rate limiti
 
 ### Execution responses
 
-- `POST /flow/codeblock` returns `{ success, result, timing, timestamp, request_id }`; `timing.executionTime` and `timing.totalTime` are milliseconds.
+- `POST /flow/codeblock` returns `{ success, result, timing, timestamp, request_id }`; `timing.executionTime` and `timing.totalTime` are milliseconds. `executionTime` measures Bun user-code execution; `totalTime` measures server-side elapsed time from the HTTP request middleware entry, before request-body reading, through the accounting submission wait. It includes request-body reading, JSON parsing, authentication, rate limits, script lookup (when applicable), quota admission and persistence, execution, and durable outbox publication waits when used. It excludes response serialization, response network delivery, and background audit/statistics settlement.
+- Persisted execution statistics and their average/max duration fields use the same Bun execution duration as `timing.executionTime`; they do not include controller or accounting overhead from `timing.totalTime`.
 - A failed code execution includes `error.type`, `error.message`, and optionally `error.stack`.
 - Errors that can be reliably mapped to user source use one-based `error.details.line`, `column`, and `lineContent`, including pre-validation syntax failures, dangerous-code policy violations, and Bun user-code runtime failures. The API does not fabricate a location when the source frame cannot be verified. Security policy violations on code execution remain `SecurityError`; script-save validation keeps its existing `ValidationError` type.
-- `GET|POST /flow/codeblock/{scriptId}` returns the script result directly on success and an error structure with `timing` on failure.
+- `GET|POST /flow/codeblock/{scriptId}` returns the script result directly on success and an error structure with `timing` on execution failure, using the same timing definitions. Rejections before execution may omit `timing`.
 - If the client closes either execution HTTP request before it completes (for example, browser `AbortController`, Postman Cancel, or an interrupted MCP HTTP call), the server cancels that execution and terminates its Bun Worker. The server still writes the failed execution record and refunds the execution quota; no cancellation response is sent after the client disconnects.
 - The server generates `X-Request-ID` for every request and ignores a caller-supplied value. CORS success responses expose it through `Access-Control-Expose-Headers`.
 - Neither execution endpoint provides business idempotency. Repeated or concurrent calls independently execute, consume quota, and write statistics after validation.
