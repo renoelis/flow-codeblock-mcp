@@ -146,8 +146,8 @@ For `GET /flow/tokens`, queries using only `ws_id` or only `email` mask `access_
 
 - `GET /`: no authentication (global IP limit); returns `data={service,version,status}`.
 - `GET /health`: unauthenticated liveness check; returns `data={status:"ok"}`.
-- `GET /health/ready`: unauthenticated readiness check; returns 200 with `ready` or 503 with `not_ready`; checks startup completion, MySQL, enabled Redis, and the Bun Supervisor pool.
-- `GET /flow/health`: administrator health details. `mode=ready` or `mode=readiness` returns dependency checks, runtime saturation, execution counters, success rate, and memory.
+- `GET /health/ready`: unauthenticated readiness check; returns 200 with `ready` or 503 with `not_ready`; checks startup completion, MySQL, enabled Redis, the Bun Supervisor pool, and token-cache invalidation reader health.
+- `GET /flow/health`: administrator health details. `mode=ready` or `mode=readiness` returns dependency checks including `checks.token_cache`, runtime saturation, execution counters, success rate, and memory. Token-cache reader initialization, recovery, or backlog keeps readiness at 503; when `checks.token_cache` is false, the overall `data.status` is `unhealthy`.
 - `GET /flow/status`: administrator runtime status, uptime, engine/version, memory, executor statistics, caches, limits, and optional rate-limiter/token-cache details.
 - `GET /flow/limits`: administrator execution, concurrency, cache, circuit-breaker, rate-limit, database, Redis, and token-cache settings.
 
