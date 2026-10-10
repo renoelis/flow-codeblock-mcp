@@ -34,8 +34,10 @@
   "forbidden_bun_apis": [
     "Bun.$",
     "Bun.FFI",
+    "Bun.FetchSession",
     "Bun.FileSystemRouter",
     "Bun.Glob",
+    "Bun.ModuleGraph",
     "Bun.RedisClient",
     "Bun.S3Client",
     "Bun.SQL",
