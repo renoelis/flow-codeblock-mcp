@@ -10,6 +10,7 @@ type ApiRequest = {
 };
 
 const apiRequests: ApiRequest[] = [];
+let apiResponse: () => Response = () => Response.json({ success: true, result: { ok: true } });
 const apiServer = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -22,7 +23,7 @@ const apiServer = Bun.serve({
       method: request.method,
       target: `${url.pathname}${url.search}`,
     });
-    return Response.json({ success: true, result: { ok: true } });
+    return apiResponse();
   },
 });
 
@@ -44,6 +45,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   apiRequests.length = 0;
+  apiResponse = () => Response.json({ success: true, result: { ok: true } });
 });
 
 afterAll(async () => {
@@ -109,5 +111,82 @@ describe("execution tool call URLs", () => {
     if (!content || content.type !== "text") throw new Error("execution error did not return text");
     expect(content.text).toContain("third-party API keys must be supplied by the caller");
     expect(apiRequests).toHaveLength(0);
+  });
+
+  test("passes a later quota-exhausted 429 through both execution tools", async () => {
+    apiResponse = () => Response.json({
+      success: false,
+      error: {
+        type: "QuotaExceededError",
+        message: "配额已用尽",
+        details: { remaining: 0, quota_type: "count" },
+      },
+    }, { status: 429 });
+
+    for (const [name, arguments_] of [
+      ["flow_execute_code", { code: "return 1;", input: {} }],
+      ["flow_execute_script", { script_id: "quota-exhausted-script", method: "POST", body: {} }],
+    ] as const) {
+      const response = await client.callTool({ name, arguments: arguments_ });
+      expect(response.isError).toBe(true);
+      const content = response.content.find((item) => item.type === "text");
+      if (!content || content.type !== "text") throw new Error(`${name} did not return error text`);
+      expect(content.text).toContain('"status": 429');
+      expect(content.text).toContain('"type": "QuotaExceededError"');
+      expect(content.text).toContain("配额已用尽");
+    }
+    expect(apiRequests).toHaveLength(2);
+  });
+
+  test("preserves unconfirmed accounting errors without retrying either execution tool", async () => {
+    const payload = {
+      success: false,
+      error: {
+        type: "ServiceUnavailableError",
+        message: "代码已执行，记账持久化未确认，请勿自动重试",
+        retryable: false,
+        details: {
+          execution_id: "unconfirmed-execution",
+          execution_completed: true,
+          accounting_persistence: "unconfirmed",
+        },
+      },
+    };
+    apiResponse = () => Response.json(payload, { status: 503 });
+    for (const [name, arguments_] of [
+      ["flow_execute_code", { code: "return 1;", input: {} }],
+      ["flow_execute_script", { script_id: "unconfirmed-script", method: "POST", body: {} }],
+    ] as const) {
+      apiRequests.length = 0;
+      const response = await client.callTool({ name, arguments: arguments_ });
+      expect(response.isError).toBe(true);
+      const content = response.content.find((item) => item.type === "text");
+      if (!content || content.type !== "text") throw new Error(`${name} did not return error text`);
+      const error = JSON.parse(content.text);
+      expect(error.status).toBe(503);
+      expect(error.error).toEqual(payload);
+      expect(apiRequests).toHaveLength(1);
+    }
+  });
+
+  test("passes quota-store recovery failures through both execution tools", async () => {
+    apiResponse = () => Response.json({
+      success: false,
+      error: { type: "ServiceUnavailableError", message: "Quota state is temporarily unavailable" },
+    }, { status: 503 });
+
+    for (const [name, arguments_] of [
+      ["flow_execute_code", { code: "return 1;", input: {} }],
+      ["flow_execute_script", { script_id: "recovering-quota-script", method: "POST", body: {} }],
+    ] as const) {
+      const response = await client.callTool({ name, arguments: arguments_ });
+      expect(response.isError).toBe(true);
+      const content = response.content.find((item) => item.type === "text");
+      if (!content || content.type !== "text") throw new Error(`${name} did not return error text`);
+      expect(content.text).toContain('"status": 503');
+      expect(content.text).toContain('"type": "ServiceUnavailableError"');
+      expect(content.text).not.toContain("QuotaExceededError");
+    }
+    expect(apiRequests).toHaveLength(2);
   });
 });

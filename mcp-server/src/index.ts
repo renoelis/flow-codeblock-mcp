@@ -422,7 +422,7 @@ const serverInstructions = [
 ].join("\n");
 
 const server = new McpServer(
-  { name: "flow-codeblock", version: "0.3.18" },
+  { name: "flow-codeblock", version: "0.3.20" },
   { instructions: serverInstructions },
 );
 
@@ -990,7 +990,7 @@ server.registerTool(
   "flow_execute_script",
   {
     title: "Execute a published script",
-    description: "Call a published script with GET or POST for a real test or business execution and return its complete script_url. Prefer flow_get_script_documentation first and follow it exactly. POST body is the caller's business JSON and must not be wrapped in input or body; query and headers are caller inputs. Do not pass platform accessToken, Cookie, CSRF, or x-flow-* headers; MCP injects platform authentication. Each call consumes quota and is rate-limited, audited, and executed in the Web worker lane. Call only when execution or testing is requested.",
+    description: "Call a published script with GET or POST for a real test or business execution and return its complete script_url. Prefer flow_get_script_documentation first and follow it exactly. POST body is the caller's business JSON and must not be wrapped in input or body; query and headers are caller inputs. Do not pass platform accessToken, Cookie, CSRF, or x-flow-* headers; MCP injects platform authentication. Quota is checked before execution; after code completes, the critical accounting task must be durably saved before returning the original result; settlement and auditing run asynchronously afterward. HTTP 503 ServiceUnavailableError with retryable=false and execution_completed=true means the code already ran but accounting persistence is unconfirmed; do not automatically retry. MCP preserves the status and error details. Later calls return the existing HTTP 429 QuotaExceededError when quota is exhausted, and MCP passes that error through. Calls remain rate-limited and run in the Web worker lane. Call only when execution or testing is requested.",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     inputSchema: {
       script_id: z.string().min(1).describe("Published script ID to execute."),
@@ -1028,7 +1028,6 @@ server.registerTool(
       }, true);
       return result({
         script_url: scriptUrl(script_id),
-        quota_notice: "This execution was handled as a normal request and consumed quota.",
         response,
       });
     } catch (error) {
@@ -1041,7 +1040,7 @@ server.registerTool(
   "flow_execute_code",
   {
     title: "Execute non-script JavaScript",
-    description: "Execute non-script JavaScript once without saving it and return the complete execution_url built from FLOW_CODEBLOCK_BASE_URL. Generate the code using flow_write_code(mode=non_script): read business data and third-party keys from global input, never process.env, and return a JSON-serializable value with top-level return. Provide exactly one of code or code_base64. Execution consumes quota and is rate-limited, security-checked, audited, and run in the Web worker lane. Do not call for code-only requests; call only when testing or execution is explicitly requested.",
+    description: "Execute non-script JavaScript once without saving it and return the complete execution_url built from FLOW_CODEBLOCK_BASE_URL. Generate the code using flow_write_code(mode=non_script): read business data and third-party keys from global input, never process.env, and return a JSON-serializable value with top-level return. Provide exactly one of code or code_base64. Quota is checked before execution; after code completes, the critical accounting task must be durably saved before returning the original result; settlement and auditing run asynchronously afterward. HTTP 503 ServiceUnavailableError with retryable=false and execution_completed=true means the code already ran but accounting persistence is unconfirmed; do not automatically retry. MCP preserves the status and error details. Later calls return the existing HTTP 429 QuotaExceededError when quota is exhausted, and MCP passes that error through. Calls remain rate-limited and security-checked and run in the Web worker lane. Do not call for code-only requests; call only when testing or execution is explicitly requested.",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     inputSchema: {
       code: z.string().min(1).optional().describe("UTF-8 JavaScript source, mutually exclusive with code_base64; prefer direct code."),
@@ -1065,7 +1064,6 @@ server.registerTool(
       return result({
         mode: "non_script",
         execution_url: `${baseUrl}/flow/codeblock`,
-        quota_notice: "This non-script execution was handled as a normal request and consumed quota.",
         response,
       });
     } catch (error) {

@@ -182,9 +182,18 @@ describe("MCP tool metadata", () => {
     expect(byName.get("flow_write_code")?.description).toContain("authoritative AGENT_PROMPT.md");
     expect(byName.get("flow_execute_script")?.description).toContain("must not be wrapped in input or body");
     expect(byName.get("flow_execute_script")?.description).toContain("script_url");
+    expect(byName.get("flow_execute_script")?.description).toContain("settlement and auditing run asynchronously");
+    expect(byName.get("flow_execute_script")?.description).toContain("HTTP 429 QuotaExceededError");
     expect(byName.get("flow_execute_code")?.description).toContain("global input");
     expect(byName.get("flow_execute_code")?.description).toContain("execution_url");
     expect(byName.get("flow_execute_code")?.description).toContain("never process.env");
+    expect(byName.get("flow_execute_code")?.description).toContain("settlement and auditing run asynchronously");
+    expect(byName.get("flow_execute_code")?.description).toContain("HTTP 429 QuotaExceededError");
+    for (const name of ["flow_execute_code", "flow_execute_script"]) {
+      expect(byName.get(name)?.description).toContain("durably saved before returning the original result");
+      expect(byName.get(name)?.description).toContain("retryable=false and execution_completed=true");
+      expect(byName.get(name)?.description).toContain("do not automatically retry");
+    }
     expect(byName.get("flow_preview_script_change")?.description).toContain("interface_doc_patch");
     expect(byName.get("flow_preview_script_change")?.description).toContain("code-only updates may omit both document fields");
     expect(byName.get("flow_preview_script_change")?.description).toContain("preview_ready=true");
