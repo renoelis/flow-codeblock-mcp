@@ -190,7 +190,9 @@ describe("MCP tool metadata", () => {
     expect(byName.get("flow_execute_code")?.description).toContain("settlement and auditing run asynchronously");
     expect(byName.get("flow_execute_code")?.description).toContain("HTTP 429 QuotaExceededError");
     for (const name of ["flow_execute_code", "flow_execute_script"]) {
-      expect(byName.get(name)?.description).toContain("durably saved before returning the original result");
+      expect(byName.get(name)?.description).toContain("local SQLite (WAL/FULL) before returning the original result");
+      expect(byName.get(name)?.description).toContain("MySQL outbox handoff");
+      expect(byName.get(name)?.description).toContain("Temporary MySQL failures retain tasks");
       expect(byName.get(name)?.description).toContain("retryable=false and execution_completed=true");
       expect(byName.get(name)?.description).toContain("do not automatically retry");
     }
