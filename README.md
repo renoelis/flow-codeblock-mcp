@@ -7,7 +7,7 @@ Local stdio MCP server and Codex Skill for Flow Codeblock. The MCP server calls 
 The deployed Flow Codeblock service runs Bun 1.4.3. The local MCP server requires Bun 1.4.0 or newer:
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.3.21
+bunx --bun flow-codeblock-mcp@0.3.22
 ```
 
 Required environment:
@@ -32,7 +32,7 @@ When `FLOW_CODEBLOCK_OWNER_EMAIL` is configured, current-owner email arguments f
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.3.21"],
+      "args": ["--bun", "flow-codeblock-mcp@0.3.22"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "https://qingcode.oalite.com",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>",
@@ -57,7 +57,7 @@ The npm package includes the MCP runtime, the `flow-codeblock` Skill, `AGENT_PRO
 - In `interface_doc.usage_refs`, `app_name`, `app_id`, `location`, and `note` are strings; quote numeric-looking IDs such as `"98701"`.
 - All JSON outputs recursively redact credential fields such as `token`, `access_token`, `authorization`, `refresh_token`, and `qingcodeToken`. Statistics such as `token_cache` and `unique_tokens` are not credentials.
 - Release ownership by requesting a `release` challenge first, then using the same script, email, and code; the script must be unlocked. MCP has no deletion tool. Deletion requires the web UI or REST API after unlock and ownership release.
-- Execution checks quota before running user code. After code completes, its critical accounting task is committed to local SQLite (WAL/FULL) before the original result is returned. MySQL outbox handoff, quota settlement and statistics run asynchronously; temporary MySQL failures retain tasks on the server's persistent volume and do not replace a locally confirmed execution result. Once quota is exhausted, later calls return HTTP 429.
+- Execution verifies quota against durable storage before running user code. Missing or mismatched quota caches recover on demand; storage failures or pending quota synchronization can return the existing HTTP 503 before execution, which MCP preserves. After code completes, its critical accounting task is committed to local SQLite (WAL/FULL) before the original result is returned. MySQL outbox handoff, quota settlement and statistics run asynchronously; temporary MySQL failures retain tasks on the server's persistent volume and do not replace a locally confirmed execution result. Once quota is exhausted, later calls return HTTP 429.
 - A known unavailable or full local accounting queue rejects requests before execution. HTTP 503 with `error.retryable=false`, `execution_completed:true`, and `accounting_persistence:"unconfirmed"` means code already ran but local accounting persistence was not confirmed. Do not automatically retry; MCP preserves the status and details.
 
 ## License
