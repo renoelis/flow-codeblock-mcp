@@ -141,6 +141,7 @@ describe("execution tool call URLs", () => {
   test("preserves unconfirmed accounting errors without retrying either execution tool", async () => {
     const payload = {
       success: false,
+      request_id: "server-generated-request-id",
       error: {
         type: "ServiceUnavailableError",
         message: "代码已执行，记账持久化未确认，请勿自动重试",
@@ -165,6 +166,7 @@ describe("execution tool call URLs", () => {
       const error = JSON.parse(content.text);
       expect(error.status).toBe(503);
       expect(error.error).toEqual(payload);
+      expect(error.error.request_id).toBe(payload.request_id);
       expect(apiRequests).toHaveLength(1);
     }
   });

@@ -48,6 +48,18 @@ afterAll(async () => {
 });
 
 describe("MCP tool metadata", () => {
+  test("keeps package, plugin, README and server versions aligned", async () => {
+    const root = join(import.meta.dir, "../..");
+    for (const path of ["package.json", "mcp-server/package.json", ".codex-plugin/plugin.json"]) {
+      const metadata = await Bun.file(join(root, path)).json();
+      expect(metadata.version).toBe("0.3.26");
+    }
+    expect(client.getServerVersion()?.version).toBe("0.3.26");
+    const readme = await Bun.file(join(root, "README.md")).text();
+    expect(readme).toContain("flow-codeblock-mcp@0.3.26");
+    expect(readme).not.toContain("flow-codeblock-mcp@0.3.25");
+  });
+
   test("publishes standalone server instructions and the complete safe tool set", () => {
     const instructions = client.getInstructions() ?? "";
     expect(instructions).toContain("self-contained");
@@ -190,11 +202,13 @@ describe("MCP tool metadata", () => {
     expect(byName.get("flow_execute_code")?.description).toContain("settlement and auditing run asynchronously");
     expect(byName.get("flow_execute_code")?.description).toContain("HTTP 429 QuotaExceededError");
     for (const name of ["flow_execute_code", "flow_execute_script"]) {
-      expect(byName.get(name)?.description).toContain("local SQLite (WAL/FULL) before returning the original result");
-      expect(byName.get(name)?.description).toContain("MySQL outbox handoff");
-      expect(byName.get(name)?.description).toContain("Temporary MySQL failures retain tasks");
+      expect(byName.get(name)?.description).toContain("MySQL outbox before returning the original result");
+      expect(byName.get(name)?.description).toContain("MySQL outbox");
+      expect(byName.get(name)?.description).toContain("accounting persistence is unconfirmed");
       expect(byName.get(name)?.description).toContain("retryable=false and execution_completed=true");
       expect(byName.get(name)?.description).toContain("do not automatically retry");
+      expect(byName.get(name)?.description).toContain("current MySQL quota_reset_version");
+      expect(byName.get(name)?.description).toContain("Non-retryable quota publisher enqueue errors");
     }
     expect(byName.get("flow_preview_script_change")?.description).toContain("interface_doc_patch");
     expect(byName.get("flow_preview_script_change")?.description).toContain("code-only updates may omit both document fields");

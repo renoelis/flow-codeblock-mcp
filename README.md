@@ -4,10 +4,10 @@ Local stdio MCP server and Codex Skill for Flow Codeblock. The MCP server calls 
 
 ## Installation
 
-The deployed Flow Codeblock service runs Bun 1.4.3. The local MCP server requires Bun 1.4.0 or newer:
+The deployed Flow Codeblock service runs Bun 1.4.4. The local MCP server requires Bun 1.4.0 or newer:
 
 ```bash
-bunx --bun flow-codeblock-mcp@0.3.22
+bunx --bun flow-codeblock-mcp@0.3.26
 ```
 
 Required environment:
@@ -32,7 +32,7 @@ When `FLOW_CODEBLOCK_OWNER_EMAIL` is configured, current-owner email arguments f
   "mcpServers": {
     "flow-codeblock": {
       "command": "bunx",
-      "args": ["--bun", "flow-codeblock-mcp@0.3.22"],
+      "args": ["--bun", "flow-codeblock-mcp@0.3.26"],
       "env": {
         "FLOW_CODEBLOCK_BASE_URL": "https://qingcode.oalite.com",
         "FLOW_CODEBLOCK_TOKEN": "<YOUR_FLOW_CODEBLOCK_TOKEN>",
@@ -57,8 +57,8 @@ The npm package includes the MCP runtime, the `flow-codeblock` Skill, `AGENT_PRO
 - In `interface_doc.usage_refs`, `app_name`, `app_id`, `location`, and `note` are strings; quote numeric-looking IDs such as `"98701"`.
 - All JSON outputs recursively redact credential fields such as `token`, `access_token`, `authorization`, `refresh_token`, and `qingcodeToken`. Statistics such as `token_cache` and `unique_tokens` are not credentials.
 - Release ownership by requesting a `release` challenge first, then using the same script, email, and code; the script must be unlocked. MCP has no deletion tool. Deletion requires the web UI or REST API after unlock and ownership release.
-- Execution verifies quota against durable storage before running user code. Missing or mismatched quota caches recover on demand; storage failures or pending quota synchronization can return the existing HTTP 503 before execution, which MCP preserves. After code completes, its critical accounting task is committed to local SQLite (WAL/FULL) before the original result is returned. MySQL outbox handoff, quota settlement and statistics run asynchronously; temporary MySQL failures retain tasks on the server's persistent volume and do not replace a locally confirmed execution result. Once quota is exhausted, later calls return HTTP 429.
-- A known unavailable or full local accounting queue rejects requests before execution. HTTP 503 with `error.retryable=false`, `execution_completed:true`, and `accounting_persistence:"unconfirmed"` means code already ran but local accounting persistence was not confirmed. Do not automatically retry; MCP preserves the status and details.
+- Execution performs a read-only quota gate before running user code. Each count/hybrid gate reads the current MySQL balance and `quota_reset_version`; Redis is preferred only when the snapshot is valid and its version matches that MySQL generation. Otherwise the MySQL balance is used; storage failures fail closed with HTTP 503. After code completes, the accounting task must be committed to the MySQL outbox before the original result is returned. The worker settles quota and statistics asynchronously and idempotently; an outbox persistence failure returns HTTP 503 with `execution_completed:true`, `accounting_persistence:"unconfirmed"`, and `retryable:false`, so clients must not retry automatically. Concurrent executions may drive the balance negative; quota responses preserve negative `remaining_quota`, while `consumed_quota` is never below `0` and may exceed `total_quota`; later calls return HTTP 429 when the observed balance is not positive.
+- Invalid quota or version keys, including Redis `WRONGTYPE`, and generation mismatches fall back to MySQL without repairing the cache. Same-generation Redis balances may still briefly lag asynchronous settlement. Connection, permission, and timeout failures still return HTTP 503. Non-retryable quota publisher enqueue errors increment the server's `enqueue_failures` and `dropped` counters once each and return an error without fallback; database errors and timeouts do not increment `dropped`. The server-generated HTTP request ID follows the outbox into consume/refund audit records; historical payloads without it remain supported. Execution audit records are retained while their outbox row exists so retries cannot charge twice.
 
 ## License
 
